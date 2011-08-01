@@ -1,0 +1,9 @@
+# Compile
+
+gcc -c ppk.c
+gcc -c test_ppk.c
+gcc -o test_ppk -lssl ppk.o test_ppk.o
+
+# Clean
+
+rm -f *.o *.pem test_ppk
