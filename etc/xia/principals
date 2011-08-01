@@ -1,0 +1,12 @@
+# eXpressive Internet Architecture (XIA) principals
+#
+# Latest version is available from git://github.com/AltraMayor/xiaconf.git
+
+nat	0x00	# Not A Type
+
+# 0x01--0x0f reserved for future use
+
+ad	0x10	# Autonomous Domain
+hid	0x11	# Host
+cid	0x12	# Content
+sid	0x13	# Service
