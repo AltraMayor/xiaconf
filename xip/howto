@@ -1,9 +1,29 @@
-# Compile
+### Compile
 
+## test_ppk
 gcc -c ppk.c
 gcc -c test_ppk.c
 gcc -o test_ppk -lssl ppk.o test_ppk.o
 
-# Clean
+## test_ppal_map
 
-rm -f *.o *.pem test_ppk
+# The following link must be created at the root of the repository.
+# Point it to your copy of XIA kernel.
+ln -s ../linux-2.6/include/ kernel-include
+
+cd xip
+
+# Test
+gcc -c -I ../kernel-include \
+-DPRINCIPAL_FILENAME=\"../etc-test/xia/principals\" \
+ppal_map.c
+# Production
+gcc -c -I ../kernel-include ppal_map.c
+
+gcc -c -I ../kernel-include test_ppal_map.c
+gcc -o test_ppal_map ppal_map.o test_ppal_map.o
+
+
+### Clean
+
+rm -f *.o *.pem test_ppk test_ppal_map
