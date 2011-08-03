@@ -53,8 +53,10 @@ int pubder_of_pkey(PPK_KEY *pkey, uint8_t *buf, int *plen);
  * @plen must hold the size of the buffer, and will receive the number of
  *	written bytes on success.
  * @hash should be at least PPK_HASH_SIZE bytes.
+ * RETURN
+ *	Zero on success; a negative number otherwise.
  */
-int hash_of_key(PPK_KEY *pkey, uint8_t *hash, int *plen);
+int hash_of_key(PPK_KEY *pkey, void *hash, int *plen);
 
 /* check_pkey - Test if @pkey hold a valid private and public keys.
  * It always fails if @pkey only holds a public key.

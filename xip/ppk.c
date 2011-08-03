@@ -84,7 +84,7 @@ int prvder_of_pkey(PPK_KEY *pkey, uint8_t *buf, int *plen)
 		pkey, buf, plen);
 }
 
-int hash_of_key(PPK_KEY *pkey, uint8_t *hash, int *plen)
+int hash_of_key(PPK_KEY *pkey, void *hash, int *plen)
 {
 	uint8_t *buf;
 	int size1, size2;

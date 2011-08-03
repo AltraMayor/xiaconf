@@ -51,11 +51,11 @@ int main(void)
 	printf("\n");
 
 	/* Save keys in PEM format. */
-	f = fopen(PRVFILE, "w+");
+	f = fopen(PRVFILE, "w");
 	assert(f);
 	assert(!write_prvpem(pkey, f));
 	assert(!fclose(f));
-	f = fopen(PUBFILE, "w+");
+	f = fopen(PUBFILE, "w");
 	assert(f);
 	assert(!write_pubpem(pkey, f));
 	assert(!fclose(f));
@@ -136,6 +136,7 @@ int main(void)
 	ppk_free_key(prvkey);
 	free(pubder);
 	free(prvder);
+	ppk_free_key(pkey);
 	end_ppk();
 
 	assert(!unlink(PRVFILE));

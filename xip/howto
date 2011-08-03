@@ -23,7 +23,13 @@ gcc -c -I ../kernel-include ppal_map.c
 gcc -c -I ../kernel-include test_ppal_map.c
 gcc -o test_ppal_map ppal_map.o test_ppal_map.o
 
+## test_hid
+
+gcc -c ppk.c
+gcc -c hid.c
+gcc -c test_hid.c
+gcc -o test_hid -lssl ppk.o hid.o test_hid.o
 
 ### Clean
 
-rm -f *.o *.pem test_ppk test_ppal_map
+rm -f *.o *.pem test_ppk test_ppal_map test_hid
