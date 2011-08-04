@@ -5,7 +5,6 @@
 #include <asm/byteorder.h>
 
 #include "hid.h"
-#include "ppk.h"
 
 #ifndef HID_PRV_PATH
 #define HID_PRV_PATH "/etc/xia/hid/prv/"
@@ -59,10 +58,10 @@ out:
 	return rc;
 }
 
-static char *split_buf(char *buf, int buflen)
+static char *split_buf(char *buf, int len)
 {
 	char *p = buf;
-	int left = buflen;
+	int left = len;
 	int empty = 1;
 
 	while (left > 0) {
@@ -81,31 +80,54 @@ static char *split_buf(char *buf, int buflen)
 	return NULL;
 }
 
-int write_pub_hid_file(const char *infilename, FILE *outf)
+static int read_and_split_buf(const char *filename, char *buf, int *plen,
+	char **psecond_half, int *second_half_len)
 {
 	int rc = -1;
 	FILE *f;
-	char buf[8*1024];
-	size_t buflen;
+	int bufsize = *plen;
+	int len;
+	char *sec_half;
+
+	f = fopen(filename, "r");
+	if (!f)
+		goto out;
+
+	len = fread(buf, 1, bufsize, f);
+	assert(len < bufsize);
+	sec_half = split_buf(buf, len);
+	if (!sec_half)
+		goto close_f;
+
+	*plen = len;
+	*psecond_half = sec_half;
+	*second_half_len = len - (sec_half - buf);
+	rc = 0;
+
+close_f:
+	fclose(f);
+out:
+	return rc;
+}
+
+#define HID_FILE_BUFFER_SIZE (8*1024)
+
+int write_pub_hid_file(const char *infilename, FILE *outf)
+{
+	int rc = -1;
+	char buf[HID_FILE_BUFFER_SIZE];
+	int buflen;
 	char *prvpem;
 	int prvpem_len;
 	PPK_KEY *pkey;
 	
-
-	f = fopen(infilename, "r");
-	if (!f)
+	buflen = sizeof(buf);
+	if (read_and_split_buf(infilename, buf, &buflen, &prvpem, &prvpem_len))
 		goto out;
 
-	buflen = fread(buf, 1, sizeof(buf), f);
-	assert(buflen < sizeof(buf));
-	prvpem = split_buf(buf, buflen);
-	if (!prvpem)
-		goto close_f;
-
-	prvpem_len = buflen - (prvpem - buf);
 	pkey = pkey_of_prvpem(prvpem, prvpem_len);
 	if (!pkey)
-		goto close_f;
+		goto out;
 	
 	fprintf(outf, "%s\n", buf);
 	if (write_pubpem(pkey, outf))
@@ -114,8 +136,33 @@ int write_pub_hid_file(const char *infilename, FILE *outf)
 	rc = 0;
 pkey:
 	ppk_free_key(pkey);
-close_f:
-	fclose(f);
+out:
+	return rc;
+}
+
+int read_hid_file(const char *filename, int is_prv, struct xia_addr *addr,
+			PPK_KEY **ppkey)
+{
+	int rc = -1;
+	char buf[HID_FILE_BUFFER_SIZE];
+	int buflen;
+	char *pem;
+	int pem_len;
+
+	buflen = sizeof(buf);
+	if (read_and_split_buf(filename, buf, &buflen, &pem, &pem_len))
+		goto out;
+
+	if (xia_pton(buf, INT_MAX, addr, 0, NULL) <= 0)
+		goto out;
+
+	*ppkey = is_prv ?	pkey_of_prvpem(pem, pem_len):
+				pkey_of_pubpem(pem, pem_len);
+	if (!*ppkey)
+		goto out;
+
+	rc = 0;
+
 out:
 	return rc;
 }

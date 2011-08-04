@@ -128,7 +128,7 @@ static int is_blank(const __u8 *str)
 }
 
 #define BUF_SIZE 256
-static void load_ppal_map(void)
+static int load_ppal_map(void)
 {
 	FILE *f;
 	/* buf and name must have the same size to properly handle cases like
@@ -141,7 +141,7 @@ static void load_ppal_map(void)
 	if (!f) {
 		fprintf(stderr, "Warning: couldn't read file: %s\n",
 			PRINCIPAL_FILENAME);
-		return;
+		return -1;
 	}
 
 	/* The minus one ensures that scanf will always be able to add
@@ -176,9 +176,10 @@ static void load_ppal_map(void)
 		add_map(name, __cpu_to_be32(cpu_ty));
 	}
 	fclose(f);
+	return 0;
 }
 
-void int_ppal_map(void)
+int int_ppal_map(void)
 {
-	load_ppal_map();
+	return load_ppal_map();
 }

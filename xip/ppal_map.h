@@ -8,8 +8,10 @@
 
 /* int_ppal_map - starts the library. Essentially, it just loads the map
  * from disk into memory.
+ * RETURN
+ *	Return zero on success, and a negative number on failure.
  */
-void int_ppal_map(void);
+int int_ppal_map(void);
 
 /* ppal_name_to_type - provides the principal type for @name.
  * If @name is not in the map, it returns XIDTYPE_NAT.

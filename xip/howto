@@ -7,10 +7,6 @@ gcc -o test_ppk -lssl ppk.o test_ppk.o
 
 ## test_ppal_map
 
-# The following link must be created at the root of the repository.
-# Point it to your copy of XIA kernel.
-ln -s ../linux-2.6/include/ kernel-include
-
 cd xip
 
 # Test
@@ -26,9 +22,13 @@ gcc -o test_ppal_map ppal_map.o test_ppal_map.o
 ## test_hid
 
 gcc -c ppk.c
-gcc -c hid.c
-gcc -c test_hid.c
-gcc -o test_hid -lssl ppk.o hid.o test_hid.o
+gcc -c -I ../kernel-include \
+-DPRINCIPAL_FILENAME=\"../etc-test/xia/principals\" \
+ppal_map.c
+gcc -c -I ../kernel-include dag.c
+gcc -c -I ../kernel-include hid.c
+gcc -c -I ../kernel-include test_hid.c
+gcc -o test_hid -lssl ppk.o ppal_map.o dag.o hid.o test_hid.o
 
 ### Clean
 

@@ -2,6 +2,9 @@
 #define HEADER_HID_H
 
 #include <stdio.h>
+#include <net/xia.h>
+
+#include "ppk.h"
 
 /* get_ffn - obtains Final FileName.
  *
@@ -26,5 +29,15 @@ int write_new_hid_file(const char *filename);
  *	returns zero on success; otherwise a negative number.
  */
 int write_pub_hid_file(const char *infilename, FILE *outf);
+
+/* read_hid_file - load @filename into @addr and @ppkey.
+ * (*ppkey) must not be allocated; it'll be allocated if no error is found.
+ * @is_prv must be true if the file holds a private key.
+ *
+ * RETURN
+ *	returns zero on success; otherwise a negative number.
+ */
+int read_hid_file(const char *filename, int is_prv, struct xia_addr *addr,
+			PPK_KEY **ppkey);
 
 #endif /* HEADER_HID_H */
