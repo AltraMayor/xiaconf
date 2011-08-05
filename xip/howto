@@ -30,6 +30,13 @@ gcc -c -I ../kernel-include hid.c
 gcc -c -I ../kernel-include test_hid.c
 gcc -o test_hid -lssl ppk.o ppal_map.o dag.o hid.o test_hid.o
 
+## xip
+
+gcc -c utils.c
+gcc -c libnetlink.c
+gcc -c xip.c
+gcc -o xip utils.o libnetlink.o xip.o
+
 ### Clean
 
-rm -f *.o *.pem test_ppk test_ppal_map test_hid
+rm -f *.o *.pem xip test_ppk test_ppal_map test_hid
