@@ -1,12 +1,10 @@
 #ifndef __LIBNETLINK_H__
 #define __LIBNETLINK_H__ 1
 
-/* XXX The following typedef shouldn't be here, but <linux/socket.h> isn't
+/* XXX The following include shouldn't be here, but <linux/socket.h> isn't
  * including it, what, in turn, breaks <linux/netlink.h> added below.
- * The problem runs deeper, sa_family_t is also defined in
- * <bits/sockaddr.h> (GNU C library).
  */
-typedef unsigned short  sa_family_t;
+#include <sys/socket.h>
 
 #include <asm/types.h>
 #include <linux/netlink.h>
@@ -23,8 +21,6 @@ struct rtnl_handle
 	__u32			seq;
 	__u32			dump;
 };
-
-extern int rcvbuf;
 
 extern int rtnl_open(struct rtnl_handle *rth, unsigned subscriptions);
 extern int rtnl_open_byproto(struct rtnl_handle *rth, unsigned subscriptions, int protocol);

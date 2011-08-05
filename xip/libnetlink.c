@@ -12,20 +12,13 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
-#include <syslog.h>
-#include <fcntl.h>
-#include <net/if_arp.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
 #include <string.h>
 #include <errno.h>
-#include <time.h>
-#include <sys/uio.h>
+#include <sys/socket.h>
 
 #include "libnetlink.h"
 
-int rcvbuf = 1024 * 1024;
+static int rcvbuf = 1024 * 1024;
 
 void rtnl_close(struct rtnl_handle *rth)
 {

@@ -3,14 +3,6 @@
 #include <string.h>
 #include <errno.h>
 
-/* XXX Does one need any of them?
-#include <unistd.h>
-#include <syslog.h>
-#include <fcntl.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-*/
-
 #include "SNAPSHOT.h"
 #include "libnetlink.h"
 #include "utils.h"
