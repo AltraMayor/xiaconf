@@ -7,12 +7,6 @@
 
 typedef EVP_PKEY PPK_KEY;
 
-/* This function should be called before a call to any function in this unit. */
-int init_ppk(void);
-
-/* This function should be called to finish this unit once initialized. */
-static inline void end_ppk(void) { /* Empty */ }
-
 /* Generate a key pair. */
 PPK_KEY *gen_keys(void);
 

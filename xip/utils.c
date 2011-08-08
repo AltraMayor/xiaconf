@@ -1,7 +1,15 @@
 #include <string.h>
 #include <stdlib.h>
+#include <assert.h>
 
 #include "utils.h"
+
+int show_stats = 0;
+int show_details = 0;
+int oneline = 0;
+int timestamp = 0;
+char *_SL_ = NULL;
+int force = 0;
 
 int matches(const char *cmd, const char *pattern)
 {
@@ -9,6 +17,25 @@ int matches(const char *cmd, const char *pattern)
 	if (len > strlen(pattern))
 		return -1;
 	return memcmp(pattern, cmd, len);
+}
+
+int do_cmd(const struct cmd *cmds, const char *entity, const char *help,
+	int argc, char **argv)
+{
+	const char *argv0;
+	const struct cmd *c;
+
+	assert(argc >= 1);
+	argv0 = argv[0];
+
+	for (c = cmds; c->cmd; c++) {
+		if (matches(argv0, c->cmd) == 0)
+			return c->func(argc-1, argv+1);
+	}
+
+	fprintf(stderr, "%s \"%s\" is unknown, try \"%s\".\n",
+		entity, help, argv0);
+	return -1;
 }
 
 /* XXX Does one really need this global variable? */

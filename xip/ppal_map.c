@@ -179,7 +179,7 @@ static int load_ppal_map(void)
 	return 0;
 }
 
-int int_ppal_map(void)
+int init_ppal_map(void)
 {
 	return load_ppal_map();
 }

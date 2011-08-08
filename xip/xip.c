@@ -3,24 +3,14 @@
 #include <string.h>
 #include <errno.h>
 
+#include "xip_common.h"
 #include "SNAPSHOT.h"
 #include "libnetlink.h"
 #include "utils.h"
 
-int show_stats = 0;
-int show_details = 0;
-int oneline = 0;
-int timestamp = 0;
-char *_SL_ = NULL;
-int force = 0;
-
-static char *batch_file = NULL;
-
 struct rtnl_handle rth = { .fd = -1 };
 
-static void usage(void) __attribute__((noreturn));
-
-static void usage(void)
+static int usage(void)
 {
 	fprintf(stderr,
 "Usage: xip [ OPTIONS ] OBJECT { COMMAND | help }\n"
@@ -28,35 +18,27 @@ static void usage(void)
 "where  OBJECT := { hid }\n"
 "       OPTIONS := { -V[ersion] | -s[tatistics] | -d[etails] |\n"
 "                    -o[neline] | -t[imestamp] | -b[atch] [filename] }\n");
-	exit(-1);
+	return -1;
 }
 
 static int do_help(int argc, char **argv)
 {
 	usage();
+	exit(-1);
 }
 
-static const struct cmd {
-	const char *cmd;
-	int (*func)(int argc, char **argv);
-} cmds[] = {
-	/*{ "hid", 	do_hid },*/
-	{ "help",       do_help },
+static const struct cmd cmds[] = {
+	{ "hid", 	do_hid	},
+	{ "help",       do_help	},
 	{ 0 }
 };
 
-static int do_cmd(const char *argv0, int argc, char **argv)
+static inline my_do_cmd(int argc, char **argv)
 {
-	const struct cmd *c;
-
-	for (c = cmds; c->cmd; c++) {
-		if (matches(argv0, c->cmd) == 0)
-			return c->func(argc-1, argv+1);
-	}
-
-	fprintf(stderr, "Object \"%s\" is unknown, try \"xip help\".\n", argv0);
-	return -1;
+	return do_cmd(cmds, "Object", "xip help", argc, argv);
 }
+
+static char *batch_file = NULL;
 
 static int batch(const char *name)
 {
@@ -87,7 +69,7 @@ static int batch(const char *name)
 		if (largc == 0)
 			continue;	/* blank line */
 
-		if (do_cmd(largv[0], largc, largv)) {
+		if (my_do_cmd(largc, largv)) {
 			fprintf(stderr, "Command failed %s:%d\n",
 				name, cmdlineno);
 			ret = 1;
@@ -133,10 +115,10 @@ int main(int argc, char **argv)
 			argc--;
 			argv++;
 			if (argc <= 1)
-				usage();
+				return usage();
 			batch_file = argv[1];
 		} else if (matches(opt, "-help") == 0) {
-			usage();
+			return usage();
 		} else {
 			fprintf(stderr, "Option \"%s\" is unknown, "
 				"try \"xip -help\".\n", opt);
@@ -154,10 +136,10 @@ int main(int argc, char **argv)
 		int rc;
 		if (rtnl_open(&rth, 0) < 0)
 			exit(1);
-		rc = do_cmd(argv[1], argc-1, argv+1);
+		rc = my_do_cmd(argc-1, argv+1);
 		rtnl_close(&rth);
 		return rc;
 	}
 
-	usage();
+	return usage();
 }

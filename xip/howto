@@ -19,24 +19,21 @@ gcc -c -I ../kernel-include ppal_map.c
 gcc -c -I ../kernel-include test_ppal_map.c
 gcc -o test_ppal_map ppal_map.o test_ppal_map.o
 
-## test_hid
+## xip
 
 gcc -c ppk.c
 gcc -c -I ../kernel-include \
 -DPRINCIPAL_FILENAME=\"../etc-test/xia/principals\" \
 ppal_map.c
 gcc -c -I ../kernel-include dag.c
-gcc -c -I ../kernel-include hid.c
-gcc -c -I ../kernel-include test_hid.c
-gcc -o test_hid -lssl ppk.o ppal_map.o dag.o hid.o test_hid.o
-
-## xip
-
+gcc -c -I ../kernel-include \
+-DHID_PRV_PATH=\"../etc-test/xia/hid/prv/\" \
+xiphid.c
 gcc -c utils.c
 gcc -c libnetlink.c
 gcc -c xip.c
-gcc -o xip utils.o libnetlink.o xip.o
+gcc -o xip -lssl ppk.o ppal_map.o dag.o utils.o libnetlink.o xiphid.o xip.o
 
 ### Clean
 
-rm -f *.o *.pem xip test_ppk test_ppal_map test_hid
+rm -f *.o *.pem xip test_ppk test_ppal_map

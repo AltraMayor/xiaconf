@@ -5,7 +5,7 @@
 
 int main(void)
 {
-	assert(!int_ppal_map());
+	assert(!init_ppal_map());
 
 	assert(ppal_name_to_type("hid"));
 	assert(ppal_name_to_type("Sid"));

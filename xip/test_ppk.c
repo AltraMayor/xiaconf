@@ -41,8 +41,6 @@ int main(void)
 	uint8_t *rbuf;
 	int rlen;
 
-	assert(!init_ppk());
-
 	/* Generate a key pair and show in PEM format. */
 	pkey = gen_keys();
 	assert(pkey);
@@ -137,7 +135,6 @@ int main(void)
 	free(pubder);
 	free(prvder);
 	ppk_free_key(pkey);
-	end_ppk();
 
 	assert(!unlink(PRVFILE));
 	assert(!unlink(PUBFILE));

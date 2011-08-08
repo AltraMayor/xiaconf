@@ -11,18 +11,30 @@
 
 #include "ppk.h"
 
-int init_ppk(void)
+/* This function should be called before a call to any function that requires
+ * that the seed is initialized to be safe.
+ */
+static void init_ppk(void)
 {
+	static int initialized = 0;
+
+	if (initialized)
+		return;
+	initialized = 1;
+
 	if (RAND_load_file("/dev/random", 4) <= 0)
-		if (RAND_load_file("/dev/urandom", 128) <= 0)
-			return -1;
-	return 0;
+		if (RAND_load_file("/dev/urandom", 128) <= 0) {
+			fprintf(stderr, "PPK library failed to inialize seed");
+			exit(-1);
+		}
 }
 
 PPK_KEY *gen_keys(void)
 {
 	PPK_KEY *pkey;
 	RSA *rsa;
+
+	init_ppk();
 
 	pkey = EVP_PKEY_new();
 	if (!pkey)
@@ -156,6 +168,7 @@ int check_pkey(PPK_KEY *pkey)
 static inline PPK_KEY *check_and_protect_pkey(PPK_KEY *pkey)
 {
 	RSA *rsa;
+
 	if (!pkey)
 		goto out;
 	if (check_pkey(pkey))
@@ -163,8 +176,12 @@ static inline PPK_KEY *check_and_protect_pkey(PPK_KEY *pkey)
 	rsa = EVP_PKEY_get1_RSA(pkey);
 	if (!rsa)
 		goto pkey;
+
+	/* Protect key. */
+	init_ppk();
 	if (RSA_blinding_on(rsa, NULL) <= 0)
 		goto rsa;
+
 	RSA_free(rsa);
 	return pkey;
 
@@ -230,6 +247,8 @@ static inline int __crypt(int decrypt, int use_prvkey,
 	RSA *rsa;
 	int min_size;
 	int (*do_it)(int, const uint8_t *, uint8_t *, RSA *, int);
+
+	init_ppk();
 
 	rsa = EVP_PKEY_get1_RSA(pkey);
 	if (!rsa)

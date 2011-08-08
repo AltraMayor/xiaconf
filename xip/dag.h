@@ -20,7 +20,7 @@
  *	INT_MAX<limits.h> could be passed in srclen if src includes a '\0'.
  *
  * IMPORTANT
- *	int_ppal_map<ppal_map.h> must be called first before this function
+ *	init_ppal_map<ppal_map.h> must be called first before this function
  *	in order to recognize principal names!
  */
 int xia_pton(const char *src, size_t srclen, struct xia_addr *dst,
