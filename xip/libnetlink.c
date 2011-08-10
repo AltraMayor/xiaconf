@@ -20,19 +20,11 @@
 
 static int rcvbuf = 1024 * 1024;
 
-void rtnl_close(struct rtnl_handle *rth)
-{
-	if (rth->fd >= 0) {
-		close(rth->fd);
-		rth->fd = -1;
-	}
-}
-
 int rtnl_open_byproto(struct rtnl_handle *rth, unsigned subscriptions,
 		      int protocol)
 {
 	socklen_t addr_len;
-	int sndbuf = 32768;
+	int sndbuf = 32 * 1024;
 
 	memset(rth, 0, sizeof(*rth));
 
@@ -52,10 +44,10 @@ int rtnl_open_byproto(struct rtnl_handle *rth, unsigned subscriptions,
 		return -1;
 	}
 
+	/* Fill rth->local. */
 	memset(&rth->local, 0, sizeof(rth->local));
 	rth->local.nl_family = AF_NETLINK;
 	rth->local.nl_groups = subscriptions;
-
 	if (bind(rth->fd, (struct sockaddr*)&rth->local, sizeof(rth->local)) < 0) {
 		perror("Cannot bind netlink socket");
 		return -1;
@@ -73,31 +65,17 @@ int rtnl_open_byproto(struct rtnl_handle *rth, unsigned subscriptions,
 		fprintf(stderr, "Wrong address family %d\n", rth->local.nl_family);
 		return -1;
 	}
+
 	rth->seq = time(NULL);
 	return 0;
 }
 
-int rtnl_open(struct rtnl_handle *rth, unsigned subscriptions)
+void rtnl_close(struct rtnl_handle *rth)
 {
-	return rtnl_open_byproto(rth, subscriptions, NETLINK_ROUTE);
-}
-
-int rtnl_wilddump_request(struct rtnl_handle *rth, int family, int type)
-{
-	struct {
-		struct nlmsghdr nlh;
-		struct rtgenmsg g;
-	} req;
-
-	memset(&req, 0, sizeof(req));
-	req.nlh.nlmsg_len = sizeof(req);
-	req.nlh.nlmsg_type = type;
-	req.nlh.nlmsg_flags = NLM_F_ROOT|NLM_F_MATCH|NLM_F_REQUEST;
-	req.nlh.nlmsg_pid = 0;
-	req.nlh.nlmsg_seq = rth->dump = ++rth->seq;
-	req.g.rtgen_family = family;
-
-	return send(rth->fd, (void*)&req, sizeof(req), 0);
+	if (rth->fd >= 0) {
+		close(rth->fd);
+		rth->fd = -1;
+	}
 }
 
 int rtnl_send(struct rtnl_handle *rth, const char *buf, int len)
@@ -136,6 +114,24 @@ int rtnl_send_check(struct rtnl_handle *rth, const char *buf, int len)
 	}
 
 	return 0;
+}
+
+int rtnl_wilddump_request(struct rtnl_handle *rth, int family, int type)
+{
+	struct {
+		struct nlmsghdr nlh;
+		struct rtgenmsg g;
+	} req;
+
+	memset(&req, 0, sizeof(req));
+	req.nlh.nlmsg_len = sizeof(req);
+	req.nlh.nlmsg_type = type;
+	req.nlh.nlmsg_flags = NLM_F_ROOT|NLM_F_MATCH|NLM_F_REQUEST;
+	req.nlh.nlmsg_pid = 0;
+	req.nlh.nlmsg_seq = rth->dump = ++rth->seq;
+	req.g.rtgen_family = family;
+
+	return send(rth->fd, (void*)&req, sizeof(req), 0);
 }
 
 int rtnl_dump_request(struct rtnl_handle *rth, int type, void *req, int len)
@@ -187,7 +183,6 @@ int rtnl_dump_filter_l(struct rtnl_handle *rth,
 
 		iov.iov_len = sizeof(buf);
 		status = recvmsg(rth->fd, &msg, 0);
-
 		if (status < 0) {
 			if (errno == EINTR || errno == EAGAIN)
 				continue;
@@ -272,7 +267,7 @@ int rtnl_dump_filter(struct rtnl_handle *rth,
 	return rtnl_dump_filter_l(rth, a);
 }
 
-int rtnl_talk(struct rtnl_handle *rtnl, struct nlmsghdr *n, pid_t peer,
+int rtnl_talk(struct rtnl_handle *rtnl, struct nlmsghdr *n, __u32 peer,
 	      unsigned groups, struct nlmsghdr *answer,
 	      rtnl_filter_t junk,
 	      void *jarg)
@@ -531,7 +526,9 @@ int addattr32(struct nlmsghdr *n, int maxlen, int type, __u32 data)
 	int len = RTA_LENGTH(4);
 	struct rtattr *rta;
 	if (NLMSG_ALIGN(n->nlmsg_len) + len > maxlen) {
-		fprintf(stderr,"addattr32: Error! max allowed bound %d exceeded\n",maxlen);
+		fprintf(stderr,
+			"addattr32: Error! max allowed bound %d exceeded\n",
+			maxlen);
 		return -1;
 	}
 	rta = NLMSG_TAIL(n);
