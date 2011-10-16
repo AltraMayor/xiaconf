@@ -10,6 +10,7 @@
 #include "utils.h"
 #include "ppal_map.h"
 #include "dag.h"
+#include "ll_map.h"
 
 #ifndef HID_PRV_PATH
 #define HID_PRV_PATH "/etc/xia/hid/prv/"
@@ -18,8 +19,8 @@
 static int usage(void)
 {
 	fprintf(stderr,
-"Usage: xip hid {new|getpub} PRVFILENAME\n"
-"       xip hid assign PRVFILENAME dev STRING\n");
+"Usage: xip hid { new | getpub } PRVFILENAME\n"
+"       xip hid addaddr PRVFILENAME dev STRING\n");
 	return -1;
 }
 
@@ -241,7 +242,7 @@ out:
 	return rc;
 }
 
-static int do_assign(int argc, char **argv)
+static int do_addaddr(int argc, char **argv)
 {
 	char ffn[PATH_MAX];
 	struct xia_addr addr;
@@ -262,11 +263,13 @@ static int do_assign(int argc, char **argv)
 		return -1;
 	}
 
-	/* TODO */
-	fprintf(stderr, "TODO: Assign address to interface %s!\n", argv[2]);
 	/* XXX There is no way of printing addr out at this point. */
 	assert(!write_prvpem(pkey, stdout));
+	/* TODO */
+	fprintf(stderr, "TODO: Assign address to interface %s(%u)!\n",
+		argv[2], ll_name_to_index(argv[2]));
 
+	ppk_free_key(pkey);
 	return 0;
 }
 
@@ -279,7 +282,7 @@ static int do_help(int argc, char **argv)
 static const struct cmd cmds[] = {
 	{ "new",	do_newhid	},
 	{ "getpub",	do_getpub	},
-	{ "assign",	do_assign	},
+	{ "addaddr",	do_addaddr	},
 	{ "help",	do_help		},
 	{ 0 }
 };
@@ -293,5 +296,6 @@ int do_hid(int argc, char **argv)
 	}
 
 	assert(!init_ppal_map());
+	assert(!ll_init_map(&rth));
 	return do_cmd(cmds, "Command", "xip hid help", argc, argv);
 }

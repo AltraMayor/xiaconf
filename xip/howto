@@ -31,8 +31,10 @@ gcc -c -I ../kernel-include \
 xiphid.c
 gcc -c utils.c
 gcc -c libnetlink.c
+gcc -c ll_map.c
 gcc -c xip.c
-gcc -o xip ppk.o ppal_map.o dag.o utils.o libnetlink.o xiphid.o xip.o -lcrypto
+gcc -o xip ppk.o ppal_map.o dag.o utils.o libnetlink.o ll_map.o \
+xiphid.o xip.o -lcrypto
 
 ### Clean
 
