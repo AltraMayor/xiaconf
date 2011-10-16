@@ -3,7 +3,7 @@
 ## test_ppk
 gcc -c ppk.c
 gcc -c test_ppk.c
-gcc -o test_ppk -lssl ppk.o test_ppk.o
+gcc -o test_ppk ppk.o test_ppk.o -lcrypto
 
 ## test_ppal_map
 
@@ -32,7 +32,7 @@ xiphid.c
 gcc -c utils.c
 gcc -c libnetlink.c
 gcc -c xip.c
-gcc -o xip -lssl ppk.o ppal_map.o dag.o utils.o libnetlink.o xiphid.o xip.o
+gcc -o xip ppk.o ppal_map.o dag.o utils.o libnetlink.o xiphid.o xip.o -lcrypto
 
 ### Clean
 
