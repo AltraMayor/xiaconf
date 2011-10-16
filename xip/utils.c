@@ -34,7 +34,7 @@ int do_cmd(const struct cmd *cmds, const char *entity, const char *help,
 	}
 
 	fprintf(stderr, "%s \"%s\" is unknown, try \"%s\".\n",
-		entity, help, argv0);
+		entity, argv0, help);
 	return -1;
 }
 
