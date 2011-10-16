@@ -85,7 +85,7 @@ int main(void)
 	prvder = malloc(prvderlen);
 	assert(prvder);
 	assert(!prvder_of_pkey(pkey, prvder, &prvderlen));
-	printf("Private DER: ");
+	printf("Private DER (length=%i bytes): ", prvderlen);
 	print_hex(prvder, prvderlen);
 	printf("\n");
 
@@ -93,7 +93,7 @@ int main(void)
 	pubder = malloc(pubderlen);
 	assert(pubder);
 	assert(!pubder_of_pkey(pkey, pubder, &pubderlen));
-	printf("Public DER: ");
+	printf("Public DER (length=%i bytes): ", pubderlen);
 	print_hex(pubder, pubderlen);
 	printf("\n\n");
 
