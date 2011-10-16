@@ -27,14 +27,14 @@ gcc -c -I ../kernel-include \
 ppal_map.c
 gcc -c -I ../kernel-include dag.c
 gcc -c -I ../kernel-include \
--DHID_PRV_PATH=\"../etc-test/xia/hid/prv/\" \
-xiphid.c
+-DHID_PRV_PATH=\"../etc-test/xia/hid/prv/\" xiphid.c
+gcc -c -I ../kernel-include xipad.c
 gcc -c utils.c
 gcc -c libnetlink.c
 gcc -c ll_map.c
 gcc -c xip.c
 gcc -o xip ppk.o ppal_map.o dag.o utils.o libnetlink.o ll_map.o \
-xiphid.o xip.o -lcrypto
+xiphid.o xipad.o xip.o -lcrypto
 
 ### Clean
 

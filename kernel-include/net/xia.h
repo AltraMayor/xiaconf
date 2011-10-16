@@ -13,25 +13,23 @@
  * XIA address
  */
 
-/* XID types. */
-enum {
-  XIDTYPE_NAT = 0,		/* Not A Type				*/
-
-  				/* 0x01--0x0f reserved for future use	*/
-
-  XIDTYPE_AD  = 0x10,		/* Autonomous Domain			*/
-  XIDTYPE_HID,			/* Host					*/
-  XIDTYPE_CID,			/* Content				*/
-  XIDTYPE_SID,			/* Service				*/
-
-  XIDTYPE_USER = 0xffffff00,	/* User defined XID			*/
-  XIDTYPE_MAX
-};
+/* Not A Type */
+#define XIDTYPE_NAT 0
+/* The range 0x01--0x0f is reserved for future use.
+ * Identification numbers for new principals should be requested from
+ * Michel Machado <michel@digirati.com.br>.
+ */
 
 /* Row or a node in a DAG. */
 #define XIA_OUTDEGREE_MAX	4
 #define XIA_XID_MAX		20
 typedef __be32 xid_type_t;
+
+struct xia_xid {
+	xid_type_t	xid_type;		/* XID type		*/
+	__u8		xid_id[XIA_XID_MAX];	/* eXpressive IDentifier*/
+};
+
 struct xia_row {
 	xid_type_t	s_xid_type;		/* XID type		*/
 	__u8		s_xid[XIA_XID_MAX];	/* eXpressive IDentifier*/
@@ -72,7 +70,7 @@ static inline int xia_is_nat(xid_type_t ty)
 /* XXX This is only needed for applications.
  * Isn't there a clearer way to do it?
  */
-#ifndef sa_family_t
+#ifndef __KERNEL__
 /* sa_family_t is not available to applications. */
 typedef unsigned short sa_family_t;
 /* _K_SS_MAXSIZE is redefined because we want to compile with
@@ -214,24 +212,6 @@ extern int xia_test_addr(const struct xia_addr *addr);
  */
 extern int xia_ntop(const struct xia_addr *src, char *dst, size_t dstlen,
 		int include_nl);
-
-/** xia_pton - Convert a string that represents an XIA addressesng into
- *	binary (network) form.
- * It doesn't not require the string src to be terminated by '\0'.
- * If ignore_ce is true, the chosen edges are not marked in dst.
- * 	It's useful to obtain an address that will be used in a header.
- * invalid_flag is set true if '!' begins the string;
- * 	otherwise it is set false.
- * RETURN
- * 	-1 if the string can't be converted.
- *	Number of parsed chars, not couting trailing '\0' if it exists.
- * NOTES
- *	Even if the function is successful, the address may
- *	still be invalid according to xia_test_addr.
- *	XIA_MAX_STRADDR_SIZE could be passed in srclen if src includes a '\0'.
- */
-extern int xia_pton(const char *src, size_t srclen, struct xia_addr *dst,
-		int ignore_ce, int *invalid_flag);
 
 #endif	/* __KERNEL__	*/
 #endif	/* _XIA_H	*/

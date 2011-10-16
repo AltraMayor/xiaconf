@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <linux/kernel.h>
 
 #include "dag.h"
@@ -70,13 +71,14 @@ static int read_name(const char **pp, size_t *pleft, char *name, int len)
 	int i = 0;
 	int last = len - 1;
 	
+	assert(len >= 1);
+
 	while (*pleft >= 1 && isname(**pp) && i < last) {
 		name[i] = **pp;
 		next(pp, pleft);
 		i++;
 	}
-	if (last >= 0)
-		name[last] = '\0';
+	name[i] = '\0';
 	return i;
 }
 
@@ -193,6 +195,38 @@ int xia_pton(const char *src, size_t srclen, struct xia_addr *dst,
 	read_sep(&p, &left, '\n');
 
 	/* A whole address must be parsed. */
+	if (left != 0 && *p != '\0')
+		return -1;
+	return srclen - left;
+}
+
+int xia_ptoxid(const char *src, size_t srclen, struct xia_xid *dst)
+{
+	const char *p = src;
+	size_t left = srclen;
+ 
+	if (read_type(&p, &left, &dst->xid_type))
+		return -1;
+	if (read_sep(&p, &left, '-'))
+		return -1;
+	if (read_xid(&p, &left, dst->xid_id))
+		return -1;
+
+	/* A whole XID must be parsed. */
+	if (left != 0 && *p != '\0')
+		return -1;
+	return srclen - left;
+}
+
+int xia_ptoid(const char *src, size_t srclen, struct xia_xid *dst)
+{
+	const char *p = src;
+	size_t left = srclen;
+ 
+	if (read_xid(&p, &left, dst->xid_id))
+		return -1;
+
+	/* A whole ID must be parsed. */
 	if (left != 0 && *p != '\0')
 		return -1;
 	return srclen - left;
