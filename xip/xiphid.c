@@ -247,6 +247,8 @@ static int do_addaddr(int argc, char **argv)
 	char ffn[PATH_MAX];
 	struct xia_addr addr;
 	PPK_KEY *pkey;
+	const char *dev;
+	unsigned oif;
 
 	if (argc != 3) {
 		fprintf(stderr, "Wrong number of parameters\n");
@@ -263,11 +265,18 @@ static int do_addaddr(int argc, char **argv)
 		return -1;
 	}
 
+	dev = argv[2];
+	oif = ll_name_to_index(dev);
+	if (!oif) {
+		fprintf(stderr, "Cannot find device '%s'\n", dev);
+		return -1;
+	}
+
+	/* TODO */
 	/* XXX There is no way of printing addr out at this point. */
 	assert(!write_prvpem(pkey, stdout));
-	/* TODO */
 	fprintf(stderr, "TODO: Assign address to interface %s(%u)!\n",
-		argv[2], ll_name_to_index(argv[2]));
+		dev, oif);
 
 	ppk_free_key(pkey);
 	return 0;
