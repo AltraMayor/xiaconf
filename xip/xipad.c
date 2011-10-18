@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <string.h>
 #include <assert.h>
 #include <limits.h>
 #include <net/xia_fib.h>
@@ -6,6 +7,9 @@
 #include "xip_common.h"
 #include "utils.h"
 #include "dag.h"
+#include "libnetlink.h"
+#include "xia_socket.h"
+#include "ll_map.h"
 
 static int usage(void)
 {
@@ -48,9 +52,210 @@ static int get_xid(const char *s, struct xia_xid *dst)
 	}
 }
 
+/* Based on iproute2/ip/iproute.c:iproute_modify. */
+static int addroute(const struct xia_xid *dst, int tbl_id,
+	const struct xia_xid *gw, unsigned oif)
+{
+	struct {
+		struct nlmsghdr 	n;
+		struct rtmsg 		r;
+		char   			buf[1024];
+	} req;
+
+	memset(&req, 0, sizeof(req));
+
+	req.n.nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg));
+	/* XXX Does one really needs all these flags? */
+	req.n.nlmsg_flags = NLM_F_REQUEST|NLM_F_CREATE|NLM_F_EXCL;
+	req.n.nlmsg_type = RTM_NEWROUTE;
+	req.r.rtm_family = AF_XIA;
+	req.r.rtm_table = tbl_id;
+
+	if (tbl_id == XRTABLE_LOCAL_INDEX) {
+		req.r.rtm_type = RTN_LOCAL;
+		req.r.rtm_scope = RT_SCOPE_HOST;
+	} else {
+		req.r.rtm_type = RTN_UNICAST;
+		req.r.rtm_scope = RT_SCOPE_LINK;
+	}
+
+	req.r.rtm_dst_len = sizeof(struct xia_xid);
+	addattr_l(&req.n, sizeof(req), RTA_DST, dst, sizeof(struct xia_xid));
+	addattr_l(&req.n, sizeof(req), RTA_GATEWAY, gw, sizeof(struct xia_xid));
+	addattr32(&req.n, sizeof(req), RTA_OIF, oif);
+
+	if (rtnl_talk(&rth, &req.n, 0, 0, NULL, NULL, NULL) < 0)
+		exit(2);
+	return 0;
+}
+
+/* Based on iproute2/ip/iproute.c:iproute_modify. */
+static int delroute(const struct xia_xid *dst, int tbl_id)
+{
+	struct {
+		struct nlmsghdr 	n;
+		struct rtmsg 		r;
+		char   			buf[1024];
+	} req;
+
+	memset(&req, 0, sizeof(req));
+
+	req.n.nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg));
+	req.n.nlmsg_flags = NLM_F_REQUEST;
+	req.n.nlmsg_type = RTM_DELROUTE;
+	req.r.rtm_family = AF_XIA;
+	req.r.rtm_table = tbl_id;
+	req.r.rtm_protocol = RTPROT_BOOT;
+
+	if (tbl_id == XRTABLE_LOCAL_INDEX) {
+		req.r.rtm_type = RTN_LOCAL;
+		req.r.rtm_scope = RT_SCOPE_HOST;
+	} else {
+		req.r.rtm_type = RTN_UNICAST;
+		req.r.rtm_scope = RT_SCOPE_NOWHERE;
+	}
+
+	req.r.rtm_dst_len = sizeof(struct xia_xid);
+	addattr_l(&req.n, sizeof(req), RTA_DST, dst, sizeof(struct xia_xid));
+
+	if (rtnl_talk(&rth, &req.n, 0, 0, NULL, NULL, NULL) < 0)
+		exit(2);
+	return 0;
+}
+
+static struct
+{
+	int tb;
+} filter;
+
+static inline void reset_filter(void)
+{
+	memset(&filter, 0, sizeof(filter));
+}
+
+static inline int rtm_get_table(struct rtmsg *r, struct rtattr **tb)
+{
+	__u32 table = r->rtm_table;
+	if (tb[RTA_TABLE])
+		table = *(__u32*) RTA_DATA(tb[RTA_TABLE]);
+	return table;
+}
+
+/* Based on iproute2/ip/iproute.c:print_route. */
+int print_route(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
+{
+	FILE *fp = (FILE*)arg;
+	struct rtmsg *r = NLMSG_DATA(n);
+	int len = n->nlmsg_len;
+	struct rtattr *tb[RTA_MAX+1];
+	int host_len = sizeof(struct xia_xid);
+	__u32 table;
+
+	if (n->nlmsg_type != RTM_NEWROUTE && n->nlmsg_type != RTM_DELROUTE) {
+		fprintf(stderr, "Not a route: %08x %08x %08x\n",
+			n->nlmsg_len, n->nlmsg_type, n->nlmsg_flags);
+		return 0;
+	}
+	len -= NLMSG_LENGTH(sizeof(*r));
+	if (len < 0) {
+		fprintf(stderr, "BUG: wrong nlmsg len %d\n", len);
+		return -1;
+	}
+	if (r->rtm_family != AF_XIA) {
+		fprintf(stderr, "BUG: wrong rtm_family %d\n", r->rtm_family);
+		return -1;
+	}
+
+	parse_rtattr(tb, RTA_MAX, RTM_RTA(r), len);
+	table = rtm_get_table(r, tb);
+
+	/* Filter happens here. */
+	if (filter.tb != table)
+		return 0;
+
+	if (n->nlmsg_type == RTM_DELROUTE)
+		fprintf(fp, "Deleted ");
+
+	/* TODO
+	if (tb[RTA_DST]) {
+		char abuf[256];
+		if (r->rtm_dst_len != host_len) {
+			fprintf(fp, "%s/%u ", rt_addr_n2a(r->rtm_family,
+							 RTA_PAYLOAD(tb[RTA_DST]),
+							 RTA_DATA(tb[RTA_DST]),
+							 abuf, sizeof(abuf)),
+				r->rtm_dst_len
+				);
+		} else {
+			fprintf(fp, "%s ", format_host(r->rtm_family,
+						       RTA_PAYLOAD(tb[RTA_DST]),
+						       RTA_DATA(tb[RTA_DST]),
+						       abuf, sizeof(abuf))
+				);
+		}
+	} else if (r->rtm_dst_len) {
+		fprintf(fp, "0/%d ", r->rtm_dst_len);
+	} else {
+		fprintf(fp, "default ");
+	}
+	*/
+
+	/* TODO
+	if (tb[RTA_GATEWAY] && filter.rvia.bitlen != host_len) {
+		char abuf[256];
+		fprintf(fp, "via %s ",
+			format_host(r->rtm_family,
+				    RTA_PAYLOAD(tb[RTA_GATEWAY]),
+				    RTA_DATA(tb[RTA_GATEWAY]),
+				    abuf, sizeof(abuf)));
+	}
+	*/
+
+	if (tb[RTA_OIF]) {
+		unsigned oif = *(int *)RTA_DATA(tb[RTA_OIF]);
+		fprintf(fp, "dev %s ", ll_index_to_name(oif));
+	}
+
+	assert(!r->rtm_src_len);
+	assert(!(r->rtm_flags & RTM_F_CLONED));
+
+	fprintf(fp, " flags [");
+	if (r->rtm_flags & RTNH_F_DEAD)
+		fprintf(fp, "dead ");
+	if (r->rtm_flags & RTNH_F_ONLINK)
+		fprintf(fp, "onlink ");
+	if (r->rtm_flags & RTNH_F_PERVASIVE)
+		fprintf(fp, "pervasive ");
+	if (r->rtm_flags & RTM_F_NOTIFY)
+		fprintf(fp, "notify ");
+	fprintf(fp, "]");
+
+	fprintf(fp, "\n");
+	fflush(fp);
+	return 0;
+}
+
+/* Based on iproute2/ip/iproute.c:iproute_list_flush_or_save. */
+static int dump(int tbl_id)
+{
+	reset_filter();
+	filter.tb = tbl_id;
+
+	if (rtnl_wilddump_request(&rth, AF_XIA, RTM_GETROUTE) < 0) {
+		perror("Cannot send dump request");
+		exit(1);
+	}
+	if (rtnl_dump_filter(&rth, print_route, stdout, NULL, NULL) < 0) {
+		fprintf(stderr, "Dump terminated\n");
+		exit(1);
+	}
+	return 0;
+}
+
 static int do_addroute(int argc, char **argv)
 {
 	int tbl_id;
+	const char *dev;
 	unsigned oif;
 	struct xia_xid dst, gw;
 
@@ -67,11 +272,15 @@ static int do_addroute(int argc, char **argv)
 	get_ad(argv[0], &dst);
 	tbl_id = get_tbl_id(argv[2]);
 	get_xid(argv[4], &gw);
-	oif = ll_name_to_index(argv[6]);
 
-	/* TODO Implement me! */
-	printf("tbl %i dev %i xid %s\n", tbl_id, oif, argv[4]);
-	return -1;
+	dev = argv[6];
+	oif = ll_name_to_index(dev);
+	if (!oif) {
+		fprintf(stderr, "Cannot find device '%s'\n", dev);
+		return -1;
+	}
+
+	return addroute(&dst, tbl_id, &gw, oif);
 }
 
 static int do_delroute(int argc, char **argv)
@@ -90,9 +299,7 @@ static int do_delroute(int argc, char **argv)
 	get_ad(argv[0], &dst);
 	tbl_id = get_tbl_id(argv[2]);
 
-	/* TODO Implement me! */
-	printf("tbl %i id %s\n", tbl_id, argv[0]);
-	return -1;
+	return delroute(&dst, tbl_id);
 }
 
 static int do_dump(int argc, char **argv)
@@ -109,9 +316,7 @@ static int do_dump(int argc, char **argv)
 	}
 	tbl_id = get_tbl_id(argv[1]);
 
-	/* TODO Implement me! */
-	printf("tbl %i\n", tbl_id);
-	return -1;
+	return dump(tbl_id);
 }
 
 static int do_help(int argc, char **argv)
