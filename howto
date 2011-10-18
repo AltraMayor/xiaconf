@@ -14,3 +14,6 @@ chmod 644 /etc/xia/hid/pub/*
 chmod 700 /etc/xia/hid/prv
 chmod 600 /etc/xia/hid/prv/*
 chmod 644 /etc/xia/principals
+
+# CScope
+cscope -b -q -R -Ikernel-include -sxip
