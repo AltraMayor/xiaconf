@@ -148,7 +148,6 @@ int print_route(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
 	struct rtmsg *r = NLMSG_DATA(n);
 	int len = n->nlmsg_len;
 	struct rtattr *tb[RTA_MAX+1];
-	int host_len = sizeof(struct xia_xid);
 	__u32 table;
 
 	if (n->nlmsg_type != RTM_NEWROUTE && n->nlmsg_type != RTM_DELROUTE) {
@@ -156,13 +155,17 @@ int print_route(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
 			n->nlmsg_len, n->nlmsg_type, n->nlmsg_flags);
 		return 0;
 	}
+	if (r->rtm_family != AF_XIA) {
+		/* fprintf(stderr, "Wrong rtm_family %d\n", r->rtm_family); */
+		return 0;
+	}
 	len -= NLMSG_LENGTH(sizeof(*r));
 	if (len < 0) {
 		fprintf(stderr, "BUG: wrong nlmsg len %d\n", len);
 		return -1;
 	}
-	if (r->rtm_family != AF_XIA) {
-		fprintf(stderr, "BUG: wrong rtm_family %d\n", r->rtm_family);
+	if (r->rtm_dst_len != sizeof(struct xia_xid)) {
+		fprintf(stderr, "BUG: wrong rtm_dst_len %d\n", r->rtm_dst_len);
 		return -1;
 	}
 
@@ -176,40 +179,23 @@ int print_route(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
 	if (n->nlmsg_type == RTM_DELROUTE)
 		fprintf(fp, "Deleted ");
 
-	/* TODO
 	if (tb[RTA_DST]) {
-		char abuf[256];
-		if (r->rtm_dst_len != host_len) {
-			fprintf(fp, "%s/%u ", rt_addr_n2a(r->rtm_family,
-							 RTA_PAYLOAD(tb[RTA_DST]),
-							 RTA_DATA(tb[RTA_DST]),
-							 abuf, sizeof(abuf)),
-				r->rtm_dst_len
-				);
-		} else {
-			fprintf(fp, "%s ", format_host(r->rtm_family,
-						       RTA_PAYLOAD(tb[RTA_DST]),
-						       RTA_DATA(tb[RTA_DST]),
-						       abuf, sizeof(abuf))
-				);
-		}
+		printf("to ");
+		assert(RTA_PAYLOAD(tb[RTA_DST]) == sizeof(struct xia_addr));
+		print_xia_addr((const struct xia_addr *)
+			RTA_DATA(tb[RTA_DST]));
 	} else if (r->rtm_dst_len) {
-		fprintf(fp, "0/%d ", r->rtm_dst_len);
+		fprintf(fp, "to 0/%d ", r->rtm_dst_len);
 	} else {
 		fprintf(fp, "default ");
 	}
-	*/
 
-	/* TODO
-	if (tb[RTA_GATEWAY] && filter.rvia.bitlen != host_len) {
-		char abuf[256];
-		fprintf(fp, "via %s ",
-			format_host(r->rtm_family,
-				    RTA_PAYLOAD(tb[RTA_GATEWAY]),
-				    RTA_DATA(tb[RTA_GATEWAY]),
-				    abuf, sizeof(abuf)));
+	if (tb[RTA_GATEWAY]) {
+		printf("gw ");
+		assert(RTA_PAYLOAD(tb[RTA_GATEWAY]) == sizeof(struct xia_addr));
+		print_xia_addr((const struct xia_addr *)
+			RTA_DATA(tb[RTA_GATEWAY]));
 	}
-	*/
 
 	if (tb[RTA_OIF]) {
 		unsigned oif = *(int *)RTA_DATA(tb[RTA_OIF]);
