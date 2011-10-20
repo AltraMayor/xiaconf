@@ -14,6 +14,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <unistd.h>
+#include <time.h>
 #include <sys/socket.h>
 
 #include "libnetlink.h"

@@ -37,10 +37,13 @@ static DEFINE_SPINLOCK(map_lock);
 static struct hlist_head ppal_head_per_name[PPAL_MAP_SIZE];
 static struct hlist_head ppal_head_per_type[PPAL_MAP_SIZE];
 
-static __u32 djb_case_hash(const __u8 *str)
+static __u32 djb_case_hash(const char *str)
 {
 	__u32 hash = 5381;
-	const __u8 *p = str;
+	/* The typecast avoids a warning.
+	 * Notice that this function expects that chars are unsigned.
+	 */
+	const __u8 *p = (const __u8 *)str;
 	while (*p) {
 		hash = ((hash << 5) + hash) + tolower(*p);
 		p++;
@@ -494,7 +497,7 @@ static int read_type(const char **pp, size_t *pleft, xid_type_t *pty)
 	return 0;
 }
 
-static int read_xid(const char **pp, size_t *pleft, char *xid)
+static int read_xid(const char **pp, size_t *pleft, __u8 *xid)
 {
 	int i;
 	__be32 *pxid = (__be32 *)xid;

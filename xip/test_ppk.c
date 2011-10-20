@@ -11,11 +11,14 @@
  * Main
  */
 
-void print_hex(unsigned char *buf, int len)
+void print_hex(char *buf, int len)
 {
 	int i;
 	for (i = 0; i < len; i++)
-		printf("%02x", buf[i]);
+		/* The typecast is necessary to not print out
+		 * "negative" numbers.
+		 */
+		printf("%02x", (unsigned char)buf[i]);
 }
 
 #define BUFSIZE 8192
@@ -28,17 +31,17 @@ int main(void)
 
 	FILE *f;
 
-	uint8_t buf[BUFSIZE];
+	char buf[BUFSIZE];
 	int buflen;
 	PPK_KEY *prvkey, *pubkey;
 
-	uint8_t *prvder, *pubder;
+	char *prvder, *pubder;
 	int prvderlen, pubderlen;
 
-	uint8_t hash[PPK_HASH_SIZE];
+	char hash[PPK_HASH_SIZE];
 	int hashlen;
 
-	uint8_t *rbuf;
+	char *rbuf;
 	int rlen;
 
 	/* Generate a key pair and show in PEM format. */

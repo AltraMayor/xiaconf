@@ -1,7 +1,6 @@
 #ifndef HEADER_PPK_H
 #define HEADER_PPK_H
 
-#include <stdint.h>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
 
@@ -38,8 +37,8 @@ static inline int der_pubkey_size(PPK_KEY *pkey)
  * RETURN
  *	Return zero on success, and a negative number on failure.
  */
-int prvder_of_pkey(PPK_KEY *pkey, uint8_t *buf, int *plen);
-int pubder_of_pkey(PPK_KEY *pkey, uint8_t *buf, int *plen);
+int prvder_of_pkey(PPK_KEY *pkey, char *buf, int *plen);
+int pubder_of_pkey(PPK_KEY *pkey, char *buf, int *plen);
 
 #define PPK_HASH_SIZE 20
 
@@ -62,26 +61,28 @@ int check_pkey(PPK_KEY *pkey);
 /* Load pkey from a buffer that has a private key in DER format.
  * Keys are ckecked. Return NULL if it fails.
  */
-PPK_KEY *pkey_of_prvder(const uint8_t *buf, int len);
+PPK_KEY *pkey_of_prvder(const char *buf, int len);
 
 /* Load pkey from a buffer that has a public key in DER format.
  * Return NULL if it fails.
  */
-static inline PPK_KEY *pkey_of_pubder(const uint8_t *buf, int len)
+static inline PPK_KEY *pkey_of_pubder(const char *buf, int len)
 {
-	return d2i_PublicKey(EVP_PKEY_RSA, NULL, &buf, len);
+	/* The typecast just avoids warning due to lack of unsigned. */
+	return d2i_PublicKey(EVP_PKEY_RSA, NULL, (const unsigned char **)&buf,
+		len);
 }
 
 /* Load pkey from a buffer that has a private key in
  * PEM (Privacy Enhanced Mail) format.
  * Keys are ckecked. Return NULL if it fails.
  */
-PPK_KEY *pkey_of_prvpem(const uint8_t *buf, int len);
+PPK_KEY *pkey_of_prvpem(const char *buf, int len);
 
 /* Load pkey from a buffer that has a public key in PEM.
  * Return NULL if it fails.
  */
-PPK_KEY *pkey_of_pubpem(const uint8_t *buf, int len);
+PPK_KEY *pkey_of_pubpem(const char *buf, int len);
 
 /* Write a private key in a file using PEM format.
  * Return zero on success, and a negative number on failure.
@@ -117,9 +118,9 @@ int result_buffer_size(PPK_KEY *pkey);
  *	If multiple blocks are necessary, consider using a symmetric cypher
  *	whose key is exchanged/protected through public/private keys.
  */
-int encrypt_blk(PPK_KEY *pkey, int use_prvkey, const uint8_t *buf, int len,
-	uint8_t *rbuf, int *rlen);
-int decrypt_blk(PPK_KEY *pkey, int use_prvkey, const uint8_t *buf, int len,
-	uint8_t *rbuf, int *rlen);
+int encrypt_blk(PPK_KEY *pkey, int use_prvkey, const char *buf, int len,
+	char *rbuf, int *rlen);
+int decrypt_blk(PPK_KEY *pkey, int use_prvkey, const char *buf, int len,
+	char *rbuf, int *rlen);
 
 #endif /* HEADER_PPK_H */

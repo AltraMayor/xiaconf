@@ -24,7 +24,7 @@ static int usage(void)
 static int do_help(int argc, char **argv)
 {
 	usage();
-	exit(-1);
+	exit(1);
 }
 
 static const struct cmd cmds[] = {
@@ -34,7 +34,7 @@ static const struct cmd cmds[] = {
 	{ 0 }
 };
 
-static inline my_do_cmd(int argc, char **argv)
+static inline int my_do_cmd(int argc, char **argv)
 {
 	return do_cmd(cmds, "Object", "xip help", argc, argv);
 }
@@ -123,7 +123,7 @@ int main(int argc, char **argv)
 		} else {
 			fprintf(stderr, "Option \"%s\" is unknown, "
 				"try \"xip -help\".\n", opt);
-			exit(-1);
+			exit(1);
 		}
 		argc--;	argv++;
 	}

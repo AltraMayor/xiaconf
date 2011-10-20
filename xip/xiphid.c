@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <asm/byteorder.h>
 #include <net/xia.h>
+#include <net/xia_dag.h>
 
 #include "xip_common.h"
 #include "ppk.h"
@@ -286,7 +287,7 @@ static int do_addaddr(int argc, char **argv)
 static int do_help(int argc, char **argv)
 {
 	usage();
-	exit(-1);
+	exit(1);
 }
 
 static const struct cmd cmds[] = {

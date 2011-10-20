@@ -4,11 +4,13 @@
 #include <limits.h>
 #include <net/xia.h>
 #include <net/xia_fib.h>
+#include <net/xia_dag.h>
 
 #include "xip_common.h"
 #include "utils.h"
 #include "libnetlink.h"
 #include "xia_socket.h"
+#include "ppal_map.h"
 #include "ll_map.h"
 
 static int usage(void)
@@ -34,21 +36,23 @@ static int get_tbl_id(const char *name)
 	return usage();
 }
 
-static int get_ad(const char *s, struct xia_xid *dst)
+static void get_ad(const char *s, struct xia_xid *dst)
 {
 	if (xia_ptoid(s, INT_MAX, dst) < 0) {
 		fprintf(stderr, "Invalid ID '%s'\n", s);
-		return usage();
+		usage();
+		exit(1);
 	}
 	/* XXX Get rid of magic numbers! */
 	dst->xid_type = __cpu_to_be32(0x10);
 }
 
-static int get_xid(const char *s, struct xia_xid *dst)
+static void get_xid(const char *s, struct xia_xid *dst)
 {
 	if (xia_ptoxid(s, INT_MAX, dst) < 0) {
 		fprintf(stderr, "Invalid XID '%s'\n", s);
-		return usage();
+		usage();
+		exit(1);
 	}
 }
 
@@ -308,7 +312,7 @@ static int do_dump(int argc, char **argv)
 static int do_help(int argc, char **argv)
 {
 	usage();
-	exit(-1);
+	exit(1);
 }
 
 static const struct cmd cmds[] = {

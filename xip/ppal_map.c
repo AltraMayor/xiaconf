@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <assert.h>
+#include <ctype.h>
 #include <linux/types.h>
 #include <asm-generic/errno-base.h>
 #include <asm/byteorder.h>
@@ -11,7 +12,7 @@
 #define PRINCIPAL_FILENAME	"/etc/xia/principals"
 #endif
 
-static void add_map(const __u8 *name, xid_type_t type)
+static void add_map(const char *name, xid_type_t type)
 {
 	int rc = ppal_add_map(name, type);
 	switch (rc) {
@@ -35,7 +36,7 @@ static void add_map(const __u8 *name, xid_type_t type)
 	}
 }
 
-static int is_blank(const __u8 *str)
+static int is_blank(const char *str)
 {
 	while (isspace(*str))
 		str++;
@@ -51,8 +52,8 @@ static int load_ppal_map(void)
 	/* buf and name must have the same size to properly handle cases like
 	 * this line: "a2345678901234567890... 99\n"
 	 */
-	__u8 buf[BUF_SIZE], name[BUF_SIZE];
-	__u8 format1[64], format2[64];
+	char buf[BUF_SIZE], name[BUF_SIZE];
+	char format1[64], format2[64];
 
 	f = fopen(PRINCIPAL_FILENAME, "r");
 	if (!f) {

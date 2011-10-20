@@ -25,7 +25,7 @@ static void init_ppk(void)
 	if (RAND_load_file("/dev/random", 4) <= 0)
 		if (RAND_load_file("/dev/urandom", 128) <= 0) {
 			fprintf(stderr, "PPK library failed to inialize seed");
-			exit(-1);
+			exit(1);
 		}
 }
 
@@ -71,10 +71,11 @@ out:
 }
 
 /* Internal function. Don't call it directly. */
-static inline int __der_of_pkey(int (*i2d)(PPK_KEY *, uint8_t **),
-	int der_len, PPK_KEY *pkey, uint8_t *buf, int *plen)
+static inline int __der_of_pkey(int (*i2d)(PPK_KEY *, unsigned char **),
+	int der_len, PPK_KEY *pkey, char *buf, int *plen)
 {
-	uint8_t *next = buf;
+	/* The typecast just avoids a warning. */
+	unsigned char *next = (unsigned char *)buf;
 	if (der_len <= 0)
 		return -1;
 	if (der_len > *plen)
@@ -84,13 +85,13 @@ static inline int __der_of_pkey(int (*i2d)(PPK_KEY *, uint8_t **),
 	return 0;
 }
 
-int pubder_of_pkey(PPK_KEY *pkey, uint8_t *buf, int *plen)
+int pubder_of_pkey(PPK_KEY *pkey, char *buf, int *plen)
 {
 	return __der_of_pkey(i2d_PublicKey, der_pubkey_size(pkey),
 		pkey, buf, plen);
 }
 
-int prvder_of_pkey(PPK_KEY *pkey, uint8_t *buf, int *plen)
+int prvder_of_pkey(PPK_KEY *pkey, char *buf, int *plen)
 {
 	return __der_of_pkey(i2d_PrivateKey, der_prvkey_size(pkey),
 		pkey, buf, plen);
@@ -98,7 +99,7 @@ int prvder_of_pkey(PPK_KEY *pkey, uint8_t *buf, int *plen)
 
 int hash_of_key(PPK_KEY *pkey, void *hash, int *plen)
 {
-	uint8_t *buf;
+	char *buf;
 	int size1, size2;
 	const EVP_MD *sha1;
 	EVP_MD_CTX ctx;
@@ -129,7 +130,10 @@ int hash_of_key(PPK_KEY *pkey, void *hash, int *plen)
 		goto buf;
 	if (EVP_DigestUpdate(&ctx, buf, size1) <= 0)
 		goto buf;
-	if (EVP_DigestFinal_ex(&ctx, hash, plen) <= 0)
+	/* The typecast just avoids a warning; it's not a problem because
+	 * the lengths are smalls.
+	 */
+	if (EVP_DigestFinal_ex(&ctx, hash, (unsigned int *)plen) <= 0)
 		goto buf;
 	assert(*plen == size1);
 	if (EVP_MD_CTX_cleanup(&ctx) <= 0)
@@ -193,13 +197,15 @@ out:
 	return NULL;
 }
 
-PPK_KEY *pkey_of_prvder(const uint8_t *buf, int len)
+PPK_KEY *pkey_of_prvder(const char *buf, int len)
 {
-	PPK_KEY *pkey = d2i_PrivateKey(EVP_PKEY_RSA, NULL, &buf, len);
+	/* The typecast just avoids a warning. */
+	PPK_KEY *pkey = d2i_PrivateKey(EVP_PKEY_RSA, NULL,
+		(const unsigned char **)&buf, len);
 	return check_and_protect_pkey(pkey);
 }
 
-PPK_KEY *pkey_of_prvpem(const uint8_t *buf, int len)
+PPK_KEY *pkey_of_prvpem(const char *buf, int len)
 {
 	BIO *bio;
 	PPK_KEY *pkey;
@@ -214,7 +220,7 @@ PPK_KEY *pkey_of_prvpem(const uint8_t *buf, int len)
 	return check_and_protect_pkey(pkey);
 }
 
-PPK_KEY *pkey_of_pubpem(const uint8_t *buf, int len)
+PPK_KEY *pkey_of_pubpem(const char *buf, int len)
 {
 	BIO *bio;
 	PPK_KEY *pkey;
@@ -242,11 +248,11 @@ int result_buffer_size(PPK_KEY *pkey)
 
 /* Internal function. Don't call it directly. */
 static inline int __crypt(int decrypt, int use_prvkey,
-	PPK_KEY *pkey, const uint8_t *buf, int len, uint8_t *rbuf, int *rlen)
+	PPK_KEY *pkey, const char *buf, int len, char *rbuf, int *rlen)
 {
 	RSA *rsa;
 	int min_size;
-	int (*do_it)(int, const uint8_t *, uint8_t *, RSA *, int);
+	int (*do_it)(int, const unsigned char *, unsigned char *, RSA *, int);
 
 	init_ppk();
 
@@ -266,7 +272,9 @@ static inline int __crypt(int decrypt, int use_prvkey,
 			goto rsa;
 		do_it = use_prvkey ? RSA_private_encrypt : RSA_public_encrypt;
 	}
-	*rlen = do_it(len, buf, rbuf, rsa, RSA_PKCS1_OAEP_PADDING);
+	/* The typecasts just avoid warnings. */
+	*rlen = do_it(len, (const unsigned char *)buf, (unsigned char *)rbuf,
+		rsa, RSA_PKCS1_OAEP_PADDING);
 	if (*rlen < 0)
 		goto rsa;
 	RSA_free(rsa);
@@ -278,14 +286,14 @@ out:
 	return -1;
 }
 
-int encrypt_blk(PPK_KEY *pkey, int use_prvkey, const uint8_t *buf, int len,
-	uint8_t *rbuf, int *rlen)
+int encrypt_blk(PPK_KEY *pkey, int use_prvkey, const char *buf, int len,
+	char *rbuf, int *rlen)
 {
 	return __crypt(0, use_prvkey, pkey, buf, len, rbuf, rlen);
 }
 
-int decrypt_blk(PPK_KEY *pkey, int use_prvkey, const uint8_t *buf, int len,
-	uint8_t *rbuf, int *rlen)
+int decrypt_blk(PPK_KEY *pkey, int use_prvkey, const char *buf, int len,
+	char *rbuf, int *rlen)
 {
 	return __crypt(1, use_prvkey, pkey, buf, len, rbuf, rlen);
 }
