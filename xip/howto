@@ -11,23 +11,28 @@ cd xip
 
 # Test
 gcc -c -I ../kernel-include \
--DPRINCIPAL_FILENAME=\"../etc-test/xia/principals\" \
-ppal_map.c
+-DPRINCIPAL_FILENAME=\"../etc-test/xia/principals\" ppal_map.c
 # Production
 gcc -c -I ../kernel-include ppal_map.c
 
 gcc -c -I ../kernel-include test_ppal_map.c
-gcc -o test_ppal_map ppal_map.o test_ppal_map.o
+gcc -c -I ../kernel-include dag.c
+gcc -o test_ppal_map ppal_map.o dag.o test_ppal_map.o
 
 ## xip
 
 gcc -c ppk.c
+
+# Test
 gcc -c -I ../kernel-include \
--DPRINCIPAL_FILENAME=\"../etc-test/xia/principals\" \
-ppal_map.c
-gcc -c -I ../kernel-include dag.c
+-DPRINCIPAL_FILENAME=\"../etc-test/xia/principals\" ppal_map.c
 gcc -c -I ../kernel-include \
 -DHID_PRV_PATH=\"../etc-test/xia/hid/prv/\" xiphid.c
+# Production
+gcc -c -I ../kernel-include ppal_map.c
+gcc -c -I ../kernel-include xiphid.c
+
+gcc -c -I ../kernel-include dag.c
 gcc -c -I ../kernel-include xipad.c
 gcc -c utils.c
 gcc -c libnetlink.c

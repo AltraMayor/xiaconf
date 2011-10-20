@@ -1,9 +1,9 @@
 #include <stdio.h>
-#include <stdlib.h>
-#include <ctype.h>
-#include <string.h>
+#include <assert.h>
 #include <linux/types.h>
+#include <asm-generic/errno-base.h>
 #include <asm/byteorder.h>
+#include <net/xia_dag.h>
 
 #include "ppal_map.h"
 
@@ -11,111 +11,28 @@
 #define PRINCIPAL_FILENAME	"/etc/xia/principals"
 #endif
 
-/* This constant must be a power of 2. */
-#define PPAL_MAP_SIZE	1024
-
-struct ppal_list {
-	struct ppal_list	*next;
-	__u8			name[MAX_PPAL_NAME_SIZE];
-	xid_type_t		type;
-};
-
-static struct ppal_list *ppal_head[PPAL_MAP_SIZE];
-
-__u32 djb_case_hash(const __u8 *str)
-{
-	__u32 hash = 5381;
-	const __u8 *p = str;
-
-	while (*p) {
-		hash = ((hash << 5) + hash) + tolower(*p);
-		p++;
-	}
-	return hash;
-}
-
-static inline struct ppal_list **p_ppalhead(const __u8 *name)
-{
-	return &ppal_head[djb_case_hash(name) & (PPAL_MAP_SIZE - 1)];
-}
-
-static inline struct ppal_list *ppalhead(const __u8 *name)
-{
-	return *p_ppalhead(name);
-}
-
-xid_type_t ppal_name_to_type(const __u8 *name)
-{
-	const struct ppal_list *entry;
-
-	for (entry = ppalhead(name); entry; entry = entry->next) {
-		if (!strcasecmp(entry->name, name))
-			return entry->type;
-	}
-	return XIDTYPE_NAT;
-}
-
-static int is_name_valid(const __u8 *name)
-{
-	int left = MAX_PPAL_NAME_SIZE;
-
-	if (!isalpha(*name))
-		return 0;
-	name++;
-	left--;
-
-	while (left > 0 && (isalnum(*name) || *name == '_')) {
-		name++;
-		left--;
-	}
-
-	if (left > 0 && *name == '\0')
-		return 1;
-	return 0;
-}
-
-static inline void lowerstr(__u8 *s)
-{
-	while(*s) {
-		*s = tolower(*s);
-		s++;
-	}
-}
-
 static void add_map(const __u8 *name, xid_type_t type)
 {
-	struct ppal_list **pentry, *entry;
-
-	if (!is_name_valid(name)) {
+	int rc = ppal_add_map(name, type);
+	switch (rc) {
+	case -EINVAL:
 		fprintf(stderr, "Warning: ignoring invalid principal name "
-			"`%s'\n", name);
-		return;
+			"or type '%s'(%x)\n", name, __be32_to_cpu(type));
+		break;
+	case -ESRCH:
+		fprintf(stderr, "Warning: ignoring duplicated "
+			"principal '%s'(%x)\n",	name, type);
+		break;
+	case -ENOMEM:
+		fprintf(stderr, "Warning: ignoring principal '%s'(%x) due to "
+			"lack of memory\n", name, type);
+		break;
+	default:
+		if (rc < 0)
+			fprintf(stderr, "Warning: ignoring principal '%s'(%x) "
+				"due to unknown error (%i)\n", name, type, rc);
+		break;
 	}
-
-	/* Avoid duplicates. */
-	for (pentry = p_ppalhead(name); (entry = *pentry);
-		pentry = &entry->next) {
-		if (!strcasecmp(entry->name, name)) {
-			fprintf(stderr, "Warning: ignoring duplicated "
-				"principal `%s' (previously defined type %x) "
-				"with type %x\n",
-				name, entry->type, type);
-			return;
-		}
-	}
-
-	/* Initialize new entry. */
-	entry = malloc(sizeof(*entry));
-	if (!entry)
-		return;
-	strncpy(entry->name, name, sizeof(entry->name));
-	entry->name[sizeof(entry->name) - 1] = '\0';
-	lowerstr(entry->name);
-	entry->type = type;
-
-	/* Add entry to head of list. */
-	entry->next = *pentry;
-	*pentry = entry;
 }
 
 static int is_blank(const __u8 *str)
@@ -182,4 +99,11 @@ static int load_ppal_map(void)
 int init_ppal_map(void)
 {
 	return load_ppal_map();
+}
+
+void print_xia_addr(const struct xia_addr *addr)
+{
+	char buf[XIA_MAX_STRADDR_SIZE];
+	assert(xia_ntop(addr, buf, XIA_MAX_STRADDR_SIZE, 1) >= 0);
+	printf("%s\n", buf);
 }

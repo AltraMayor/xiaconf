@@ -9,7 +9,6 @@
 #include "ppk.h"
 #include "utils.h"
 #include "ppal_map.h"
-#include "dag.h"
 #include "ll_map.h"
 
 #ifndef HID_PRV_PATH
@@ -228,8 +227,10 @@ static int read_hid_file(const char *filename, int is_prv,
 	if (read_and_split_buf(filename, buf, &buflen, &pem, &pem_len))
 		goto out;
 
-	if (xia_pton(buf, INT_MAX, addr, 0, NULL) <= 0)
+	if (xia_pton(buf, INT_MAX, addr, 0, NULL) <= 0) {
+		fprintf(stderr, "Can't parse address:\n[[%s]]\n", buf);
 		goto out;
+	}
 
 	*ppkey = is_prv ?	pkey_of_prvpem(pem, pem_len):
 				pkey_of_pubpem(pem, pem_len);
@@ -273,8 +274,8 @@ static int do_addaddr(int argc, char **argv)
 	}
 
 	/* TODO */
-	/* XXX There is no way of printing addr out at this point. */
 	assert(!write_prvpem(pkey, stdout));
+	print_xia_addr(&addr);
 	fprintf(stderr, "TODO: Assign address to interface %s(%u)!\n",
 		dev, oif);
 
