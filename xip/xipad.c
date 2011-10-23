@@ -43,8 +43,7 @@ static void get_ad(const char *s, struct xia_xid *dst)
 		usage();
 		exit(1);
 	}
-	/* XXX Get rid of magic numbers! */
-	dst->xid_type = __cpu_to_be32(0x10);
+	assert(!ppal_name_to_type("ad", &dst->xid_type));
 }
 
 static void get_xid(const char *s, struct xia_xid *dst)
