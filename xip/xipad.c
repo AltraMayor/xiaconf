@@ -129,7 +129,7 @@ static int delroute(const struct xia_xid *dst, int tbl_id)
 
 static struct
 {
-	int tb;
+	__u32 tb;
 } filter;
 
 static inline void reset_filter(void)
@@ -153,6 +153,8 @@ int print_route(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
 	int len = n->nlmsg_len;
 	struct rtattr *tb[RTA_MAX+1];
 	__u32 table;
+
+	UNUSED(who);
 
 	if (n->nlmsg_type != RTM_NEWROUTE && n->nlmsg_type != RTM_DELROUTE) {
 		fprintf(stderr, "Not a route: %08x %08x %08x\n",
@@ -311,6 +313,8 @@ static int do_dump(int argc, char **argv)
 
 static int do_help(int argc, char **argv)
 {
+	UNUSED(argc);
+	UNUSED(argv);
 	usage();
 	exit(1);
 }
@@ -320,7 +324,7 @@ static const struct cmd cmds[] = {
 	{ "delroute",	do_delroute	},
 	{ "dump",	do_dump		},
 	{ "help",	do_help		},
-	{ 0 }
+	{ 0,		0 }
 };
 
 int do_ad(int argc, char **argv)

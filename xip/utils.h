@@ -27,4 +27,6 @@ ssize_t getcmdline(char **line, size_t *len, FILE *in);
 /* split command line into argument vector. */
 int makeargs(char *line, char *argv[], int maxargs);
 
+#define UNUSED(x) (void)x
+
 #endif /* HEADER_UTILS_H */

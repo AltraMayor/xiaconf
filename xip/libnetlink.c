@@ -10,6 +10,11 @@
  *
  */
 
+/* XXX This code should be reviewed to at least remove compiling warnings
+ * that show up when option -Wextra is used, but a review that reduces the
+ * length of large functions, adds comments that explain the code, and
+ * gives a more linear flow would be greatly appreciated.
+ */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

@@ -1,8 +1,8 @@
 ### Compile
 
 ## test_ppk
-gcc -Wall -c ppk.c
-gcc -Wall -c test_ppk.c
+gcc -Wall -Wextra -c ppk.c
+gcc -Wall -Wextra -c test_ppk.c
 gcc -o test_ppk ppk.o test_ppk.o -lcrypto
 
 ## test_ppal_map
@@ -10,33 +10,34 @@ gcc -o test_ppk ppk.o test_ppk.o -lcrypto
 cd xip
 
 # Test
-gcc -Wall -c -I ../kernel-include \
+gcc -Wall -Wextra -c -I ../kernel-include \
 -DPRINCIPAL_FILENAME=\"../etc-test/xia/principals\" ppal_map.c
 # Production
-gcc -Wall -c -I ../kernel-include ppal_map.c
+gcc -Wall -Wextra -c -I ../kernel-include ppal_map.c
 
-gcc -Wall -c -I ../kernel-include dag.c
-gcc -Wall -c -I ../kernel-include test_ppal_map.c
+gcc -Wall -Wextra -c -I ../kernel-include dag.c
+gcc -Wall -Wextra -c -I ../kernel-include test_ppal_map.c
 gcc -o test_ppal_map ppal_map.o dag.o test_ppal_map.o
 
 ## xip
 
 # Test
-gcc -Wall -c -I ../kernel-include \
+gcc -Wall -Wextra -c -I ../kernel-include \
 -DPRINCIPAL_FILENAME=\"../etc-test/xia/principals\" ppal_map.c
-gcc -Wall -c -I ../kernel-include \
+gcc -Wall -Wextra -c -I ../kernel-include \
 -DHID_PRV_PATH=\"../etc-test/xia/hid/prv/\" xiphid.c
 # Production
-gcc -Wall -c -I ../kernel-include ppal_map.c
-gcc -Wall -c -I ../kernel-include xiphid.c
+gcc -Wall -Wextra -c -I ../kernel-include ppal_map.c
+gcc -Wall -Wextra -c -I ../kernel-include xiphid.c
 
-gcc -c ppk.c
-gcc -Wall -c -I ../kernel-include dag.c
-gcc -Wall -c -I ../kernel-include xipad.c
-gcc -Wall -c utils.c
+gcc -Wall -Wextra -c ppk.c
+gcc -Wall -Wextra -c -I ../kernel-include dag.c
+gcc -Wall -Wextra -c -I ../kernel-include xipad.c
+gcc -Wall -Wextra -c utils.c
+# libnetlink.c has warning when -Wextra is used.
 gcc -Wall -c libnetlink.c
-gcc -Wall -c ll_map.c
-gcc -Wall -c xip.c
+gcc -Wall -Wextra -c ll_map.c
+gcc -Wall -Wextra -c xip.c
 gcc -o xip ppk.o ppal_map.o dag.o utils.o libnetlink.o ll_map.o \
 xiphid.o xipad.o xip.o -lcrypto
 

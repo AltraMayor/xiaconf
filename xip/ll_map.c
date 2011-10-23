@@ -21,6 +21,7 @@
 #include <net/if.h>
 
 #include "ll_map.h"
+#include "utils.h"
 
 struct ll_cache
 {
@@ -48,6 +49,9 @@ int ll_remember_index(const struct sockaddr_nl *who,
 	struct ifinfomsg *ifi = NLMSG_DATA(n);
 	struct ll_cache *im, **imp;
 	struct rtattr *tb[IFLA_MAX+1];
+
+	UNUSED(who);
+	UNUSED(arg);
 
 	if (n->nlmsg_type != RTM_NEWLINK)
 		return 0;
@@ -77,7 +81,7 @@ int ll_remember_index(const struct sockaddr_nl *who,
 	im->type = ifi->ifi_type;
 	im->flags = ifi->ifi_flags;
 	if (tb[IFLA_ADDRESS]) {
-		int alen;
+		size_t alen;
 		im->alen = alen = RTA_PAYLOAD(tb[IFLA_ADDRESS]);
 		if (alen > sizeof(im->addr))
 			alen = sizeof(im->addr);
@@ -90,7 +94,7 @@ int ll_remember_index(const struct sockaddr_nl *who,
 	return 0;
 }
 
-const char *ll_idx_n2a(unsigned idx, char *buf)
+const char *ll_idx_n2a(int idx, char *buf)
 {
 	const struct ll_cache *im;
 
@@ -106,14 +110,14 @@ const char *ll_idx_n2a(unsigned idx, char *buf)
 }
 
 
-const char *ll_index_to_name(unsigned idx)
+const char *ll_index_to_name(int idx)
 {
 	static char nbuf[IFNAMSIZ];
 
 	return ll_idx_n2a(idx, nbuf);
 }
 
-int ll_index_to_type(unsigned idx)
+int ll_index_to_type(int idx)
 {
 	const struct ll_cache *im;
 
@@ -125,7 +129,7 @@ int ll_index_to_type(unsigned idx)
 	return -1;
 }
 
-unsigned ll_index_to_flags(unsigned idx)
+unsigned ll_index_to_flags(int idx)
 {
 	const struct ll_cache *im;
 
@@ -138,7 +142,7 @@ unsigned ll_index_to_flags(unsigned idx)
 	return 0;
 }
 
-unsigned ll_index_to_addr(unsigned idx, unsigned char *addr,
+unsigned ll_index_to_addr(int idx, unsigned char *addr,
 			  unsigned alen)
 {
 	const struct ll_cache *im;

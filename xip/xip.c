@@ -23,6 +23,8 @@ static int usage(void)
 
 static int do_help(int argc, char **argv)
 {
+	UNUSED(argc);
+	UNUSED(argv);
 	usage();
 	exit(1);
 }
@@ -31,7 +33,7 @@ static const struct cmd cmds[] = {
 	{ "ad", 	do_ad	},
 	{ "hid", 	do_hid	},
 	{ "help",       do_help	},
-	{ 0 }
+	{ 0,		0 }
 };
 
 static inline int my_do_cmd(int argc, char **argv)

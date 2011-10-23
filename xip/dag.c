@@ -211,6 +211,7 @@ EXPORT_SYMBOL(ppal_del_map);
  * Validating addresses
  */
 
+/* Notice that this constant is little and big endian at same time! */
 #define EMPTY_EDGES 	(XIA_EMPTY_EDGE << 24 | XIA_EMPTY_EDGE << 16 |\
 			 XIA_EMPTY_EDGE <<  8 | XIA_EMPTY_EDGE)
 int xia_test_addr(const struct xia_addr *addr)
@@ -265,12 +266,11 @@ int xia_test_addr(const struct xia_addr *addr)
 		/* Test entry point is present. Notice that it's just a
 		 * friendlier error since it's also XIAEADDR_MULTI_COMPONENTS.
 		 */
-		/* __be32_to_cpu is not necessary here! */
 		__be32 all_edges = addr->s_row[n - 1].s_edge.i;
 		if (all_edges == EMPTY_EDGES)
 			return -XIAEADDR_NO_ENTRY;
 
-		if (visited != ((1 << n) - 1))
+		if (visited != ((1U << n) - 1))
 			return -XIAEADDR_MULTI_COMPONENTS;
 	}
 

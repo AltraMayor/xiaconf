@@ -286,6 +286,8 @@ static int do_addaddr(int argc, char **argv)
 
 static int do_help(int argc, char **argv)
 {
+	UNUSED(argc);
+	UNUSED(argv);
 	usage();
 	exit(1);
 }
@@ -295,7 +297,7 @@ static const struct cmd cmds[] = {
 	{ "getpub",	do_getpub	},
 	{ "addaddr",	do_addaddr	},
 	{ "help",	do_help		},
-	{ 0 }
+	{ 0,		0 }
 };
 
 int do_hid(int argc, char **argv)
