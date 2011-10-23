@@ -7,8 +7,6 @@ gcc -o test_ppk ppk.o test_ppk.o -lcrypto
 
 ## test_ppal_map
 
-cd xip
-
 # Test
 gcc -Wall -Wextra -c -I ../kernel-include \
 -DPRINCIPAL_FILENAME=\"../etc-test/xia/principals\" ppal_map.c

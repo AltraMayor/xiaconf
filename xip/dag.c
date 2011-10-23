@@ -212,9 +212,6 @@ EXPORT_SYMBOL(ppal_del_map);
  * Validating addresses
  */
 
-/* Notice that this constant is little and big endian at same time! */
-#define EMPTY_EDGES 	(XIA_EMPTY_EDGE << 24 | XIA_EMPTY_EDGE << 16 |\
-			 XIA_EMPTY_EDGE <<  8 | XIA_EMPTY_EDGE)
 int xia_test_addr(const struct xia_addr *addr)
 {
 	int i, j, n;
@@ -249,7 +246,8 @@ int xia_test_addr(const struct xia_addr *addr)
 			if (e & XIA_CHOSEN_EDGE) {
 				return -XIAEADDR_CHOSEN_EDGE;
 			} else if (e == XIA_EMPTY_EDGE) {
-				if ((all_edges & bits) != (EMPTY_EDGES & bits))
+				if ((all_edges & bits) !=
+					(XIA_EMPTY_EDGES & bits))
 					return -XIAEADDR_EE_MISPLACED;
 				else
 					break;
@@ -268,7 +266,7 @@ int xia_test_addr(const struct xia_addr *addr)
 		 * friendlier error since it's also XIAEADDR_MULTI_COMPONENTS.
 		 */
 		__be32 all_edges = addr->s_row[n - 1].s_edge.i;
-		if (all_edges == EMPTY_EDGES)
+		if (all_edges == XIA_EMPTY_EDGES)
 			return -XIAEADDR_NO_ENTRY;
 
 		if (visited != ((1U << n) - 1))
@@ -663,6 +661,8 @@ int xia_pton(const char *src, size_t srclen, struct xia_addr *dst,
 	size_t left = srclen;
 	int i = 0;
  
+	memset(dst, 0, sizeof(*dst));
+
 	if (read_invalid_flag(&p, &left, invalid_flag))
 		return -1;
 

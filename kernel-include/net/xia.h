@@ -38,8 +38,15 @@ struct xia_row {
 		__be32	i;
 	} s_edge;				/* Out edges		*/
 };
+
 #define XIA_CHOSEN_EDGE		0x80
 #define XIA_EMPTY_EDGE		0x7f
+
+/* Notice that this constant is little and big endian
+ * at same time up to 32bits.
+ */
+#define XIA_EMPTY_EDGES	(XIA_EMPTY_EDGE << 24 | XIA_EMPTY_EDGE << 16 |\
+			 XIA_EMPTY_EDGE <<  8 | XIA_EMPTY_EDGE)
 
 static inline int is_edge_chosen(__u8 e)
 {

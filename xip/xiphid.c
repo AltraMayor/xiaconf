@@ -5,6 +5,7 @@
 #include <asm/byteorder.h>
 #include <net/xia.h>
 #include <net/xia_dag.h>
+#include <asm-generic/errno-base.h>
 
 #include "xip_common.h"
 #include "ppk.h"
@@ -43,6 +44,32 @@ static void get_ffn(char *ffn, const char *filename)
 	}
 }
 
+/* Obtain a DAG of the key pair. */
+static int create_hid_addr(PPK_KEY *pkey, struct xia_addr *addr)
+{
+	int hashlen;
+	struct xia_row *row = &addr->s_row[0];
+	int rc;
+
+	memset(addr, 0, sizeof(*addr));
+
+	/* Set XID type as HID. */
+	assert(!ppal_name_to_type("hid", &row->s_xid.xid_type));
+
+	/* Set ID. */
+	hashlen = XIA_XID_MAX;
+	rc = hash_of_key(pkey, row->s_xid.xid_id, &hashlen);
+	if (rc)
+		return rc;
+	assert(hashlen == XIA_XID_MAX);
+	
+	/* Set entry node. */
+	row->s_edge.i = XIA_EMPTY_EDGES;
+	row->s_edge.a[0] = 0;
+
+	return 0;
+}
+
 /* write_new_hid_file - generates a new HID and save to @filename.
  *
  * RETURN
@@ -50,32 +77,37 @@ static void get_ffn(char *ffn, const char *filename)
  */
 static int write_new_hid_file(const char *filename)
 {
-	int rc = -1;
 	FILE *f;
 	PPK_KEY *pkey;
-	__be32 hash[5];
-	int hashlen;
+	struct xia_addr addr;
+	char buf[XIA_MAX_STRADDR_SIZE];
+	int rc;
 
+	rc = -1;
 	f = fopen(filename, "w");
 	if (!f)
 		goto out;
+
+	rc = -ENOMEM;
 	pkey = gen_keys();
 	if (!pkey)
 		goto close_f;
-	
-	/* Obtain a DAG of the key pair. */
-	hashlen = sizeof(hash);
-	if (hash_of_key(pkey, hash, &hashlen))
-		goto pkey;
-	fprintf(f, "hid-%08x%08x%08x%08x%08x-0\n\n",
-		__be32_to_cpu(hash[0]), __be32_to_cpu(hash[1]),
-		__be32_to_cpu(hash[2]), __be32_to_cpu(hash[3]),
-		__be32_to_cpu(hash[4]));
 
-	if (write_prvpem(pkey, f))
+	rc = create_hid_addr(pkey, &addr);
+	if (rc)
+		goto pkey;
+	
+	rc = xia_ntop(&addr, buf, sizeof(buf), 1);
+	if (rc < 0)
+		goto pkey;
+	fprintf(f, "%s\n\n", buf);
+
+	rc = write_prvpem(pkey, f);
+	if (rc)
 		goto pkey;
 
 	rc = 0;
+
 pkey:
 	ppk_free_key(pkey);
 close_f:
@@ -156,6 +188,32 @@ out:
 
 #define HID_FILE_BUFFER_SIZE (8*1024)
 
+static int parse_and_validate_addr(char *str, struct xia_addr *addr)
+{
+	int invalid_flag;
+	int rc;
+
+	rc = xia_pton(str, INT_MAX, addr, 0, &invalid_flag);
+	if (rc < 0) {
+		fprintf(stderr, "Syntax error: invalid address: [[%s]]\n", str);
+		return rc;
+	}
+	rc = xia_test_addr(addr);
+	if (rc < 0) {
+		char buf[XIA_MAX_STRADDR_SIZE];
+		assert(xia_ntop(addr, buf, XIA_MAX_STRADDR_SIZE, 1) >= 0);
+		fprintf(stderr, "Invalid address (%i): [[%s]] "
+			"as seen by xia_xidtop: [[%s]]\n", -rc, str, buf);
+		return rc;
+	}
+	if (invalid_flag) {
+		fprintf(stderr, "Although valid, address has invalid flag: "
+			"[[%s]]\n", str);
+		return -1;
+	}
+	return 0;
+}
+
 /* write_pub_hid_file - reads @infilename, a file with the private key, and
  * writes @outf a file with the public key.
  *
@@ -164,23 +222,31 @@ out:
  */
 static int write_pub_hid_file(const char *infilename, FILE *outf)
 {
-	int rc = -1;
 	char buf[HID_FILE_BUFFER_SIZE];
 	int buflen;
 	char *prvpem;
 	int prvpem_len;
 	PPK_KEY *pkey;
+	struct xia_addr addr;
+	int rc;
 	
 	buflen = sizeof(buf);
-	if (read_and_split_buf(infilename, buf, &buflen, &prvpem, &prvpem_len))
+	rc = read_and_split_buf(infilename, buf, &buflen, &prvpem, &prvpem_len);
+	if (rc)
 		goto out;
 
+	rc = parse_and_validate_addr(buf, &addr);
+	if (rc)
+		goto out;
+
+	rc = -1;
 	pkey = pkey_of_prvpem(prvpem, prvpem_len);
 	if (!pkey)
 		goto out;
 	
 	fprintf(outf, "%s\n", buf);
-	if (write_pubpem(pkey, outf))
+	rc = write_pubpem(pkey, outf);
+	if (rc)
 		goto pkey;
 
 	rc = 0;
@@ -225,23 +291,20 @@ static int read_hid_file(const char *filename, int is_prv,
 	int pem_len;
 
 	buflen = sizeof(buf);
-	if (read_and_split_buf(filename, buf, &buflen, &pem, &pem_len))
-		goto out;
+	rc = read_and_split_buf(filename, buf, &buflen, &pem, &pem_len);
+	if (rc)
+		return rc;
 
-	if (xia_pton(buf, INT_MAX, addr, 0, NULL) <= 0) {
-		fprintf(stderr, "Can't parse address:\n[[%s]]\n", buf);
-		goto out;
-	}
+	rc = parse_and_validate_addr(buf, addr);
+	if (rc)
+		return rc;
 
 	*ppkey = is_prv ?	pkey_of_prvpem(pem, pem_len):
 				pkey_of_pubpem(pem, pem_len);
 	if (!*ppkey)
-		goto out;
+		return rc;
 
-	rc = 0;
-
-out:
-	return rc;
+	return 0;
 }
 
 static int do_addaddr(int argc, char **argv)
