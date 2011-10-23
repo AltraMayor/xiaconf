@@ -12,4 +12,7 @@ int init_ppal_map(void);
 /* Simple function to print out an XIA address. */
 void print_xia_addr(const struct xia_addr *addr);
 
+/* Simple function to print out an XID. */
+void print_xia_xid(const struct xia_xid *xid);
+
 #endif /* HEADER_PPAL_MAP_H */

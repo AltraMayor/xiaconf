@@ -108,3 +108,10 @@ void print_xia_addr(const struct xia_addr *addr)
 	assert(xia_ntop(addr, buf, XIA_MAX_STRADDR_SIZE, 1) >= 0);
 	printf("%s\n", buf);
 }
+
+void print_xia_xid(const struct xia_xid *xid)
+{
+	char buf[XIA_MAX_STRXID_SIZE];
+	assert(xia_xidtop(xid, buf, XIA_MAX_STRXID_SIZE) >= 0);
+	printf("%s\n", buf);
+}

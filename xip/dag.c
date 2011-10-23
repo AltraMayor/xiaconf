@@ -11,6 +11,7 @@
  * For userland uses, copy the following files:
  * net/xia/dag.c		This file!
  * net/xia/dag_userland.h	Defines for userland.
+ * include/net/xia.h		Header file.
  * include/net/xia_dag.h	Header file.
  *
  */
@@ -223,7 +224,7 @@ int xia_test_addr(const struct xia_addr *addr)
 	/* Test that XIDTYPE_NAT is present only on last rows. */
 	n = XIA_NODES_MAX;
 	for (i = 0; i < XIA_NODES_MAX; i++) {
-		xid_type_t ty = addr->s_row[i].s_xid_type;
+		xid_type_t ty = addr->s_row[i].s_xid.xid_type;
 		if (saw_nat) {
 			if (!xia_is_nat(ty))
 				return -XIAEADDR_NAT_MISPLACED;
@@ -295,87 +296,172 @@ static inline char edge_to_char(__u8 e)
 		return '+';
 }
 
-#define EDGES_STR_SIZE (XIA_OUTDEGREE_MAX * 2 + 2)
-static void edges_to_str(int valid, char *str, int len, const __u8 *edges)
+/* Perform s >= u.
+ * It's useful to avoid compiling warnings, and be sure what's going on
+ * when numbers are large.
+ */
+static inline int su_ge(signed int s, unsigned int u)
 {
-	char *p = str;
-	int i;
+	return (s >= 0) && ((unsigned int)s >= u);
+}
 
-	BUG_ON(len < EDGES_STR_SIZE);
+static inline int add_str(char *dst, size_t dstlen, char *s)
+{
+	int rc = snprintf(dst, dstlen, "%s", s);
+	if (su_ge(rc, dstlen))
+		return -ENOSPC;
+	return rc;
+}
 
-	*(p++) = '-';
+static inline int add_char(char *dst, size_t dstlen, char ch)
+{
+	if (dstlen <= 1)
+		return -ENOSPC;
+	dst[0] = ch;
+	dst[1] = '\0';
+	return 1;
+}
+
+static inline void move_buf(char **dst, size_t *dstlen, int *tot, int step)
+{
+	(*dst) += step;
+	(*dstlen) -= step;
+	(*tot) += step;
+}
+
+static int edges_to_str(int valid, char *dst, size_t dstlen, const __u8 *edges)
+{
+	int tot = 0;
+	char *begin = dst;
+	int rc, i;
+
+	rc = add_char(dst, dstlen, '-');
+	if (rc < 0)
+		return rc;
+	move_buf(&dst, &dstlen, &tot, rc);
+
 	for (i = 0; i < XIA_OUTDEGREE_MAX; i++) {
 		if (valid && edges[i] == XIA_EMPTY_EDGE) {
 			if (i == 0) {
-				*str = '\0';
-				return;
+				*begin = '\0';
+				return 0;
 			}
 			break;
 		}
-		if (is_edge_chosen(edges[i]))
-			*(p++) = '>';
-		*(p++) = edge_to_char(edges[i]);
+
+		if (is_edge_chosen(edges[i])) {
+			rc = add_char(dst, dstlen, '>');
+			if (rc < 0)
+				return rc;
+			move_buf(&dst, &dstlen, &tot, rc);
+		}
+
+		rc = add_char(dst, dstlen, edge_to_char(edges[i]));
+		if (rc < 0)
+			return rc;
+		move_buf(&dst, &dstlen, &tot, rc);
 	}
-	*p = '\0';
+	return tot;
 }
+
+int xia_tytop(xid_type_t ty, char *dst, size_t dstlen)
+{
+	if (dstlen < MAX_PPAL_NAME_SIZE)
+		return -ENOSPC;
+	if (ppal_type_to_name(ty, dst)) {
+		/* Number format. */
+		BUILD_BUG_ON(sizeof(xid_type_t) != 4);
+		int rc = snprintf(dst, dstlen, "0x%x", __be32_to_cpu(ty));
+		if (su_ge(rc, dstlen))
+			return -ENOSPC;
+		return rc;
+	} else
+		return strlen(dst);
+}
+EXPORT_SYMBOL(xia_tytop);
+
+int xia_idtop(const struct xia_xid *src, char *dst, size_t dstlen)
+{
+	const __be32 *pxid = (const __be32 *)src->xid_id;
+	__u32 a = __be32_to_cpu(pxid[0]);
+	__u32 b = __be32_to_cpu(pxid[1]);
+	__u32 c = __be32_to_cpu(pxid[2]);
+	__u32 d = __be32_to_cpu(pxid[3]);
+	__u32 e = __be32_to_cpu(pxid[4]);
+	int rc;
+
+	BUILD_BUG_ON(XIA_XID_MAX != 20);
+
+	rc = snprintf(dst, dstlen, "%08x%08x%08x%08x%08x", a, b, c, d, e);
+	if (su_ge(rc, dstlen))
+		return -ENOSPC;
+	return rc;
+}
+EXPORT_SYMBOL(xia_idtop);
+
+int xia_xidtop(const struct xia_xid *src, char *dst, size_t dstlen)
+{
+	int tot = 0;
+	int rc;
+
+	rc = xia_tytop(src->xid_type, dst, dstlen);
+	if (rc < 0)
+		return rc;
+	move_buf(&dst, &dstlen, &tot, rc);
+
+	rc = add_char(dst, dstlen, '-');
+	if (rc < 0)
+		return rc;
+	move_buf(&dst, &dstlen, &tot, rc);
+
+	rc = xia_idtop(src, dst, dstlen);
+	if (rc < 0)
+		return rc;
+	move_buf(&dst, &dstlen, &tot, rc);
+
+	return tot;
+}
+EXPORT_SYMBOL(xia_xidtop);
 
 int xia_ntop(const struct xia_addr *src, char *dst, size_t dstlen,
 	int include_nl)
 {
-	int i;
-	size_t left = dstlen;
-	char *p = dst;
-	size_t tot = 0;
+	int tot = 0;
 	char *node_sep = include_nl ? ":\n" : ":";
 	int valid = xia_test_addr(src) >= 1;
-
-	BUILD_BUG_ON(sizeof(xid_type_t) != 4);
-	BUILD_BUG_ON(XIA_XID_MAX != 20);
+	int rc, i;
 
 	if (!valid) {
-		/* The DAG is invalid or empty. */
-		if (left <= 0)
-			return -ENOSPC;
-		*p = '!';
-		left--;
-		p++;
-		tot++;
+		rc = add_char(dst, dstlen, '!');
+		if (rc < 0)
+			return rc;
+		move_buf(&dst, &dstlen, &tot, rc);
 	}
 	
-	for (i = 0; i < XIA_NODES_MAX && left > 0; i++) {
+	for (i = 0; i < XIA_NODES_MAX; i++) {
 		const struct xia_row *row = &src->s_row[i];
-		xid_type_t ty = row->s_xid_type;
-		const __be32 *pxid = (const __be32 *)row->s_xid;
-		__u32 a = __be32_to_cpu(pxid[0]);
-		__u32 b = __be32_to_cpu(pxid[1]);
-		__u32 c = __be32_to_cpu(pxid[2]);
-		__u32 d = __be32_to_cpu(pxid[3]);
-		__u32 e = __be32_to_cpu(pxid[4]);
-		char str_edges[EDGES_STR_SIZE];
-		char *sep = i > 0 ? node_sep : "";
-		char ppal[MAX_PPAL_NAME_SIZE];
-		int count;
 
-		if (xia_is_nat(ty))
+		if (valid && xia_is_nat(row->s_xid.xid_type))
 			break;
 
-		BUILD_BUG_ON(sizeof(ppal) < 11);
-		if (ppal_type_to_name(ty, ppal))
-			snprintf(ppal, sizeof(ppal), "0x%x", __be32_to_cpu(ty));
+		if (i > 0) {
+			rc = add_str(dst, dstlen, node_sep);
+			if (rc < 0)
+				return rc;
+			move_buf(&dst, &dstlen, &tot, rc);
+		}
 
-		edges_to_str(valid, str_edges, EDGES_STR_SIZE, row->s_edge.a);
-		count = snprintf(p, left, "%s%s-%08x%08x%08x%08x%08x%s",
-			sep, ppal, a, b, c, d, e, str_edges);
-		if (count < 0)
-			return -EINVAL;
-		left -= count;
-		p += count;
-		tot += count;
+		rc = xia_xidtop(&row->s_xid, dst, dstlen);
+		if (rc < 0)
+			return rc;
+		move_buf(&dst, &dstlen, &tot, rc);
+
+		rc = edges_to_str(valid, dst, dstlen, row->s_edge.a);
+		if (rc < 0)
+			return rc;
+		move_buf(&dst, &dstlen, &tot, rc);
 	}
 
-	if (left <= 0)
-		return -ENOSPC;
-	*p = '\0';
 	return tot;
 }
 EXPORT_SYMBOL(xia_ntop);
@@ -551,11 +637,11 @@ static int read_edges(const char **pp, size_t *pleft, __u8 *edges,
 static int read_row(const char **pp, size_t *pleft, struct xia_row *row,
 	int ignore_ce)
 {
-	if (read_type(pp, pleft, &row->s_xid_type))
+	if (read_type(pp, pleft, &row->s_xid.xid_type))
 		return -1;
 	if (read_sep(pp, pleft, '-'))
 		return -1;
-	if (read_xid(pp, pleft, row->s_xid))
+	if (read_xid(pp, pleft, row->s_xid.xid_id))
 		return -1;
 	if (read_edges(pp, pleft, row->s_edge.a, ignore_ce))
 		return -1;
