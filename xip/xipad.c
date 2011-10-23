@@ -174,6 +174,7 @@ int print_route(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
 		return -1;
 	}
 
+	/* XXX Doesn't the kernel provide similar function? */
 	parse_rtattr(tb, RTA_MAX, RTM_RTA(r), len);
 	table = rtm_get_table(r, tb);
 
@@ -186,9 +187,8 @@ int print_route(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
 
 	if (tb[RTA_DST]) {
 		printf("to ");
-		assert(RTA_PAYLOAD(tb[RTA_DST]) == sizeof(struct xia_addr));
-		print_xia_addr((const struct xia_addr *)
-			RTA_DATA(tb[RTA_DST]));
+		assert(RTA_PAYLOAD(tb[RTA_DST]) == sizeof(struct xia_xid));
+		print_xia_xid((const struct xia_xid *)RTA_DATA(tb[RTA_DST]));
 	} else if (r->rtm_dst_len) {
 		fprintf(fp, "to 0/%d ", r->rtm_dst_len);
 	} else {
@@ -197,8 +197,8 @@ int print_route(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
 
 	if (tb[RTA_GATEWAY]) {
 		printf("gw ");
-		assert(RTA_PAYLOAD(tb[RTA_GATEWAY]) == sizeof(struct xia_addr));
-		print_xia_addr((const struct xia_addr *)
+		assert(RTA_PAYLOAD(tb[RTA_GATEWAY]) == sizeof(struct xia_xid));
+		print_xia_xid((const struct xia_xid *)
 			RTA_DATA(tb[RTA_GATEWAY]));
 	}
 
