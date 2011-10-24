@@ -368,8 +368,8 @@ int xia_tytop(xid_type_t ty, char *dst, size_t dstlen)
 		return -ENOSPC;
 	if (ppal_type_to_name(ty, dst)) {
 		/* Number format. */
-		BUILD_BUG_ON(sizeof(xid_type_t) != 4);
 		int rc = snprintf(dst, dstlen, "0x%x", __be32_to_cpu(ty));
+		BUILD_BUG_ON(sizeof(xid_type_t) != 4);
 		if (su_ge(rc, dstlen))
 			return -ENOSPC;
 		return rc;
