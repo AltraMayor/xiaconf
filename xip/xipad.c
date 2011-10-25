@@ -221,7 +221,7 @@ int print_route(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
 		fprintf(fp, "notify ");
 	fprintf(fp, "]");
 
-	fprintf(fp, "\n");
+	fprintf(fp, "\n\n");
 	fflush(fp);
 	return 0;
 }
