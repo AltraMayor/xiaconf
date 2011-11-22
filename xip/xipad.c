@@ -15,13 +15,17 @@
 
 static int usage(void)
 {
+/* XXX Shouldn't  addroute/delroute support multiple gateways for
+ * the same AD?
+ */
 	fprintf(stderr,
-"Usage: xip ad addroute ID tbl { local | main } gw XID dev STRING\n"
+"Usage: xip ad addroute ID tbl { local | main } gw XID\n"
 "       xip ad delroute ID tbl { local | main }\n"
 "	xip ad dump tbl { local | main }\n"
 "where	ID := HEXDIGIT{20}\n"
-"       XID := PRINCIPAL-ID\n"
-"	PRINCIPAL := NUMBER | STRING\n");
+"       XID := PRINCIPAL '-' ID\n"
+"	PRINCIPAL := '0x' NUMBER | STRING\n"
+"	DEV := STRING NUMBER\n");
 	return -1;
 }
 
@@ -57,7 +61,7 @@ static void get_xid(const char *s, struct xia_xid *dst)
 
 /* Based on iproute2/ip/iproute.c:iproute_modify. */
 static int addroute(const struct xia_xid *dst, int tbl_id,
-	const struct xia_xid *gw, unsigned oif)
+	const struct xia_xid *gw)
 {
 	struct {
 		struct nlmsghdr 	n;
@@ -73,6 +77,7 @@ static int addroute(const struct xia_xid *dst, int tbl_id,
 	req.n.nlmsg_type = RTM_NEWROUTE;
 	req.r.rtm_family = AF_XIA;
 	req.r.rtm_table = tbl_id;
+	req.r.rtm_protocol = RTPROT_BOOT;
 
 	if (tbl_id == XRTABLE_LOCAL_INDEX) {
 		req.r.rtm_type = RTN_LOCAL;
@@ -82,10 +87,9 @@ static int addroute(const struct xia_xid *dst, int tbl_id,
 		req.r.rtm_scope = RT_SCOPE_LINK;
 	}
 
-	req.r.rtm_dst_len = sizeof(struct xia_xid);
-	addattr_l(&req.n, sizeof(req), RTA_DST, dst, sizeof(struct xia_xid));
-	addattr_l(&req.n, sizeof(req), RTA_GATEWAY, gw, sizeof(struct xia_xid));
-	addattr32(&req.n, sizeof(req), RTA_OIF, oif);
+	req.r.rtm_dst_len = sizeof(*dst);
+	addattr_l(&req.n, sizeof(req), RTA_DST, dst, sizeof(*dst));
+	addattr_l(&req.n, sizeof(req), RTA_GATEWAY, gw, sizeof(*gw));
 
 	if (rtnl_talk(&rth, &req.n, 0, 0, NULL, NULL, NULL) < 0)
 		exit(2);
@@ -118,8 +122,8 @@ static int delroute(const struct xia_xid *dst, int tbl_id)
 		req.r.rtm_scope = RT_SCOPE_NOWHERE;
 	}
 
-	req.r.rtm_dst_len = sizeof(struct xia_xid);
-	addattr_l(&req.n, sizeof(req), RTA_DST, dst, sizeof(struct xia_xid));
+	req.r.rtm_dst_len = sizeof(*dst);
+	addattr_l(&req.n, sizeof(req), RTA_DST, dst, sizeof(*dst));
 
 	if (rtnl_talk(&rth, &req.n, 0, 0, NULL, NULL, NULL) < 0)
 		exit(2);
@@ -128,20 +132,14 @@ static int delroute(const struct xia_xid *dst, int tbl_id)
 
 static struct
 {
-	__u32 tb;
+	__u32		tb;
+	xid_type_t	xid_type;
 } filter;
 
 static inline void reset_filter(void)
 {
 	memset(&filter, 0, sizeof(filter));
-}
-
-static inline int rtm_get_table(struct rtmsg *r, struct rtattr **tb)
-{
-	__u32 table = r->rtm_table;
-	if (tb[RTA_TABLE])
-		table = *(__u32*) RTA_DATA(tb[RTA_TABLE]);
-	return table;
+	assert(!ppal_name_to_type("ad", &filter.xid_type));
 }
 
 /* Based on iproute2/ip/iproute.c:print_route. */
@@ -151,6 +149,7 @@ int print_route(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
 	struct rtmsg *r = NLMSG_DATA(n);
 	int len = n->nlmsg_len;
 	struct rtattr *tb[RTA_MAX+1];
+	const struct xia_xid *dst;
 	__u32 table;
 
 	UNUSED(who);
@@ -176,35 +175,31 @@ int print_route(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
 
 	/* XXX Doesn't the kernel provide similar function? */
 	parse_rtattr(tb, RTA_MAX, RTM_RTA(r), len);
-	table = rtm_get_table(r, tb);
+	table = rtnl_get_table(r, tb);
 
 	/* Filter happens here. */
 	if (filter.tb != table)
 		return 0;
+	if (!tb[RTA_DST] ||
+		RTA_PAYLOAD(tb[RTA_DST]) != sizeof(struct xia_xid) ||
+		r->rtm_dst_len != sizeof(struct xia_xid))
+		return -1;
+	dst = (const struct xia_xid *)RTA_DATA(tb[RTA_DST]);
+	if (dst->xid_type != filter.xid_type)
+		return 0;
 
 	if (n->nlmsg_type == RTM_DELROUTE)
 		fprintf(fp, "Deleted ");
-
-	if (tb[RTA_DST]) {
-		printf("to ");
-		assert(RTA_PAYLOAD(tb[RTA_DST]) == sizeof(struct xia_xid));
-		print_xia_xid((const struct xia_xid *)RTA_DATA(tb[RTA_DST]));
-	} else if (r->rtm_dst_len) {
-		fprintf(fp, "to 0/%d ", r->rtm_dst_len);
-	} else {
-		fprintf(fp, "default ");
-	}
+	fprintf(fp, "to ");
+	/* XXX It got to use fp! */
+	print_xia_xid(dst);
+	fprintf(fp, "\n");
 
 	if (tb[RTA_GATEWAY]) {
 		printf("gw ");
 		assert(RTA_PAYLOAD(tb[RTA_GATEWAY]) == sizeof(struct xia_xid));
 		print_xia_xid((const struct xia_xid *)
 			RTA_DATA(tb[RTA_GATEWAY]));
-	}
-
-	if (tb[RTA_OIF]) {
-		unsigned oif = *(int *)RTA_DATA(tb[RTA_OIF]);
-		fprintf(fp, "dev %s ", ll_index_to_name(oif));
 	}
 
 	assert(!r->rtm_src_len);
@@ -246,17 +241,14 @@ static int dump(int tbl_id)
 static int do_addroute(int argc, char **argv)
 {
 	int tbl_id;
-	const char *dev;
-	unsigned oif;
 	struct xia_xid dst, gw;
 
-	if (argc != 7) {
+	if (argc != 5) {
 		fprintf(stderr, "Wrong number of parameters\n");
 		return usage();
 	}
 	if (strcmp(argv[1], "tbl") ||
-	    strcmp(argv[3], "gw")  ||
-	    strcmp(argv[5], "dev")) {
+	    strcmp(argv[3], "gw")) {
 		fprintf(stderr, "Wrong parameters\n");
 		return usage();
 	}
@@ -264,14 +256,7 @@ static int do_addroute(int argc, char **argv)
 	tbl_id = get_tbl_id(argv[2]);
 	get_xid(argv[4], &gw);
 
-	dev = argv[6];
-	oif = ll_name_to_index(dev);
-	if (!oif) {
-		fprintf(stderr, "Cannot find device '%s'\n", dev);
-		return -1;
-	}
-
-	return addroute(&dst, tbl_id, &gw, oif);
+	return addroute(&dst, tbl_id, &gw);
 }
 
 static int do_delroute(int argc, char **argv)

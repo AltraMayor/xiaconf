@@ -113,5 +113,5 @@ void print_xia_xid(const struct xia_xid *xid)
 {
 	char buf[XIA_MAX_STRXID_SIZE];
 	assert(xia_xidtop(xid, buf, XIA_MAX_STRXID_SIZE) >= 0);
-	printf("%s\n", buf);
+	printf("%s", buf);
 }

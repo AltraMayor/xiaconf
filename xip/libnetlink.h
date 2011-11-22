@@ -115,6 +115,9 @@ extern int __parse_rtattr_nested_compat(struct rtattr *tb[], int max, struct rta
  * Miscellaneous
  */
 
+/* Obtain table ID. */
+int rtnl_get_table(struct rtmsg *r, struct rtattr **tb);
+
 /* Send @n to @peer/@groups, and obtain the reply in @answer.
  * junk and jarg are called for replies that are not proper.
  */

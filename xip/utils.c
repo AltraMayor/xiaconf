@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <assert.h>
@@ -101,4 +102,97 @@ int makeargs(char *line, char *argv[], int maxargs)
 	argv[argc] = NULL;
 
 	return argc;
+}
+
+int lladdr_ntop(unsigned char *lladdr, int alen, char *buf, int blen)
+{
+	int i;
+	char *sep = "";
+	char *p = buf;
+
+	for (i = 0; i < alen; i++) {
+		int count = snprintf(p, blen, "%s%02x", sep, lladdr[i]);
+		if (count < 0 || count >= blen)
+			return -1;
+		p += count;
+		blen -= count;
+		sep = ":";
+	}
+	return 0;
+}
+
+static inline int hexd_to_val(int ch)
+{
+	if ('0' <= ch && ch <= '9')
+		return ch - '0' + 0;
+	if ('A' <= ch && ch <= 'F')
+		return ch - 'A' + 10;
+	if ('a' <= ch && ch <= 'f')
+		return ch - 'a' + 10;
+	return -1;
+}
+
+int lladdr_pton(char *str, char *lladdr, int alen)
+{
+	char *p = str;	/* String cursor.				*/
+	int v;		/* Temporary value.				*/
+	int octet;	/* The octet being unconvered.			*/
+	int digit = 0;	/* State of the machine.			*/
+	int count = 0;	/* Number of octets pushed into @lladdr.	*/
+
+	while (*p && alen > 0) {
+		switch (digit) {
+		case 0:
+			/* We expect a hexdigit. */
+			v = hexd_to_val(*p);
+			if (v < 0)
+				return -1;
+			octet = v;
+			digit++;
+			break;
+		case 1:
+			/* We expect a hexdigit or ':'. */
+			if (*p == ':') {
+				*(lladdr++) = octet;
+				alen--;
+				count++;
+			} else {
+				v = hexd_to_val(*p);
+				if (v < 0)
+					return -1;
+				octet = (octet << 4) + v;
+			}
+			digit++;
+			break;
+		case 2:
+			/* We expect a ':'. */
+			if (*p == ':') {
+				*(lladdr++) = octet;
+				alen--;
+				count++;
+			} else
+				return -1;
+			digit = 0;
+			break;
+		default:
+			return -1;
+		}
+		p++;
+	}
+
+	/* The tests read as follows:
+	 *	1. String isn't fully parsed.
+	 *	2. There's a more octet to add, but @lladdr is full.
+	 *	3. No octet was found.
+	 */
+	if (*p || (digit && alen <= 0) || (count == 0))
+		return -1;
+
+	if (digit) {
+		assert(alen > 0);
+		*lladdr = octet;
+		count++;
+	}
+
+	return count;
 }

@@ -685,3 +685,11 @@ int __parse_rtattr_nested_compat(struct rtattr *tb[], int max, struct rtattr *rt
 	memset(tb, 0, sizeof(struct rtattr *) * (max + 1));
 	return 0;
 }
+
+int rtnl_get_table(struct rtmsg *r, struct rtattr **tb)
+{
+	__u32 table = r->rtm_table;
+	if (tb[RTA_TABLE])
+		table = *(__u32*)RTA_DATA(tb[RTA_TABLE]);
+	return table;
+}
