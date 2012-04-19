@@ -4,7 +4,7 @@
 #include <linux/spinlock.h>
 #include <linux/export.h>
 
-#define mymalloc(n)	kmalloc(n, GFP_KERNEL)
+#define mymalloc(n)	kmalloc(n, GFP_ATOMIC)
 #define myfree(p)	kfree(p)
 
 #else /* Userland */
@@ -25,21 +25,21 @@ struct hlist_node {
 
 #undef offsetof
 #ifdef __compiler_offsetof
-#define offsetof(TYPE,MEMBER) __compiler_offsetof(TYPE,MEMBER)
+#define offsetof(TYPE, MEMBER) __compiler_offsetof(TYPE, MEMBER)
 #else
 #define offsetof(TYPE, MEMBER) ((size_t) &((TYPE *)0)->MEMBER)
 #endif
 
 #define container_of(ptr, type, member) ({			\
-	const typeof( ((type *)0)->member ) *__mptr = (ptr);	\
-	(type *)( (char *)__mptr - offsetof(type,member) );})
+	const typeof(((type *)0)->member) *__mptr = (ptr);	\
+	(type *)((char *)__mptr - offsetof(type, member)); })
 
-#define hlist_entry(ptr, type, member) container_of(ptr,type,member)
+#define hlist_entry(ptr, type, member) container_of(ptr, type, member)
 
 #define hlist_for_each_entry(tpos, pos, head, member)			 \
 	for (pos = (head)->first;					 \
 	     pos &&							 \
-		({ tpos = hlist_entry(pos, typeof(*tpos), member); 1;}); \
+		({ tpos = hlist_entry(pos, typeof(*tpos), member); 1; }); \
 	     pos = pos->next)
 #define hlist_for_each_entry_rcu	hlist_for_each_entry
 
@@ -78,6 +78,10 @@ static inline void hlist_del(struct hlist_node *n)
 
 #define BUG_ON(b)	assert(!(b))
 
+/* Force a compilation error if a constant expression is not a power of 2 */
+#define BUILD_BUG_ON_NOT_POWER_OF_2(n)			\
+	BUILD_BUG_ON((n) == 0 || (((n) & ((n) - 1)) != 0))
+
 #define EXPORT_SYMBOL(x)
 
 #define spin_lock(x)
@@ -88,5 +92,6 @@ static inline void rcu_read_unlock(void)	{ }
 static inline void synchronize_rcu(void)	{ }
 
 #define likely(b) (b)
+#define unlikely(b) (b)
 
 #endif /* __KERNEL__ */

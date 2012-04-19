@@ -61,14 +61,14 @@ static inline struct hlist_head *head_per_name(const char *name)
 static inline struct hlist_head *head_per_type(xid_type_t type)
 {
 	BUILD_BUG_ON_NOT_POWER_OF_2(PPAL_MAP_SIZE);
-	return &ppal_head_per_type[type & (PPAL_MAP_SIZE - 1)];
+	return &ppal_head_per_type[__be32_to_cpu(type) & (PPAL_MAP_SIZE - 1)];
 }
 
 int ppal_name_to_type(const char *name, xid_type_t *pty)
 {
 	const struct ppal_node *map;
 	const struct hlist_node *p;
-	int rc = -ESRCH;
+	int rc = -ENOENT;
 
 	rcu_read_lock();
 	hlist_for_each_entry_rcu(map, p, head_per_name(name), lst_per_name)
@@ -88,7 +88,7 @@ int ppal_type_to_name(xid_type_t type, char *name)
 {
 	const struct ppal_node *map;
 	const struct hlist_node *p;
-	int rc = -ESRCH;
+	int rc = -ENOENT;
 
 	rcu_read_lock();
 	hlist_for_each_entry_rcu(map, p, head_per_type(type), lst_per_type)
@@ -130,7 +130,7 @@ static int is_name_valid(const char *name)
 
 static inline void lowerstr(char *s)
 {
-	while(*s) {
+	while (*s) {
 		*s = tolower(*s);
 		s++;
 	}
@@ -155,7 +155,7 @@ int ppal_add_map(const char *name, xid_type_t type)
 	spin_lock(&map_lock);
 
 	/* Avoid duplicates. */
-	rc = -ESRCH;
+	rc = -EEXIST;
 	hlist_for_each_entry(map, p, h_per_name, lst_per_name)
 		if (!strcasecmp(map->name, name))
 			goto out;
@@ -188,7 +188,6 @@ int ppal_del_map(xid_type_t type)
 {
 	struct ppal_node *map;
 	struct hlist_node *p;
-	int rc = -ESRCH;
 
 	spin_lock(&map_lock);
 
@@ -196,15 +195,16 @@ int ppal_del_map(xid_type_t type)
 		if (map->type == type) {
 			hlist_del_rcu(&map->lst_per_name);
 			hlist_del_rcu(&map->lst_per_type);
+
+			spin_unlock(&map_lock);
+
 			synchronize_rcu();
 			myfree(map);
-			rc = 0;
-			goto out;
+			return 0;
 		}
 
-out:
 	spin_unlock(&map_lock);
-	return rc;
+	return -ENOENT;
 }
 EXPORT_SYMBOL(ppal_del_map);
 
@@ -212,9 +212,57 @@ EXPORT_SYMBOL(ppal_del_map);
  * Validating addresses
  */
 
+int xia_are_edges_valid(const struct xia_row *row,
+	__u8 node, __u8 num_node, __u32 *pvisited)
+{
+	const __u8 *edge;
+	__u32 all_edges, bits;
+	int i;
+
+	BUILD_BUG_ON(XIA_OUTDEGREE_MAX != 4);
+
+	/* The plus one is just to make sure that the following number
+	 * is valid ((1U << num_node) - 1).
+	 */
+	BUILD_BUG_ON(XIA_NODES_MAX + 1 > sizeof(*pvisited) * 8);
+
+	if (unlikely(is_any_edge_chosen(row))) {
+		/* Since at least an edge of last_node has already
+		 * been chosen, the address is corrupted.
+		 */
+		return -XIAEADDR_CHOSEN_EDGE;
+	}
+
+	edge = row->s_edge.a;
+	all_edges = __be32_to_cpu(row->s_edge.i);
+	bits = 0xffffffff;
+	for (i = 0; i < XIA_OUTDEGREE_MAX; i++, edge++) {
+		__u8 e = *edge;
+		if (e == XIA_EMPTY_EDGE) {
+			if ((all_edges & bits) !=
+				(XIA_EMPTY_EDGES & bits))
+				return -XIAEADDR_EE_MISPLACED;
+			else
+				break;
+		} else if (e >= num_node) {
+			return -XIAEADDR_EDGE_OUT_RANGE;
+		} else if (node < (num_node - 1) && e <= node) {
+			/* Notice that if (node == XIA_ENTRY_NODE_INDEX)
+			 * it still works fine because XIA_ENTRY_NODE_INDEX
+			 * is greater than (num_node - 1).
+			 */
+			return -XIAEADDR_NOT_TOPOLOGICAL;
+		}
+		bits >>= 8;
+		*pvisited |= 1 << e;
+	}
+	return 0;
+}
+EXPORT_SYMBOL(xia_are_edges_valid);
+
 int xia_test_addr(const struct xia_addr *addr)
 {
-	int i, j, n;
+	int i, n;
 	int saw_nat = 0;
 	__u32 visited = 0;
 
@@ -232,33 +280,11 @@ int xia_test_addr(const struct xia_addr *addr)
 	}
 	/* n = number of nodes from here. */
 
-	BUILD_BUG_ON(XIA_OUTDEGREE_MAX != 4);
-	BUILD_BUG_ON(XIA_NODES_MAX + 1 > sizeof(visited) * 8);
-
 	/* Test edges are well formed. */
 	for (i = 0; i < n; i++) {
-		const struct xia_row *row = &addr->s_row[i];
-		const __u8 *edge = row->s_edge.a;
-		__u32 all_edges = __be32_to_cpu(row->s_edge.i);
-		__u32 bits = 0xffffffff;
-		for (j = 0; j < XIA_OUTDEGREE_MAX; j++, edge++) {
-			__u8 e = *edge;
-			if (e & XIA_CHOSEN_EDGE) {
-				return -XIAEADDR_CHOSEN_EDGE;
-			} else if (e == XIA_EMPTY_EDGE) {
-				if ((all_edges & bits) !=
-					(XIA_EMPTY_EDGES & bits))
-					return -XIAEADDR_EE_MISPLACED;
-				else
-					break;
-			} else if (e >= n) {
-				return -XIAEADDR_EDGE_OUT_RANGE;
-			} else if (i < (n - 1) && e <= i) {
-				return -XIAEADDR_NOT_TOPOLOGICAL;
-			}
-			bits >>= 8;
-			visited |= 1 << e;
-		}
+		int rc = xia_are_edges_valid(&addr->s_row[i], i, n, &visited);
+		if (rc)
+			return rc;
 	}
 
 	if (n >= 1) {
@@ -266,7 +292,7 @@ int xia_test_addr(const struct xia_addr *addr)
 		 * friendlier error since it's also XIAEADDR_MULTI_COMPONENTS.
 		 */
 		__be32 all_edges = addr->s_row[n - 1].s_edge.i;
-		if (all_edges == XIA_EMPTY_EDGES)
+		if (be32_to_raw_cpu(all_edges) == XIA_EMPTY_EDGES)
 			return -XIAEADDR_NO_ENTRY;
 
 		if (visited != ((1U << n) - 1))
@@ -435,7 +461,7 @@ int xia_ntop(const struct xia_addr *src, char *dst, size_t dstlen,
 			return rc;
 		move_buf(&dst, &dstlen, &tot, rc);
 	}
-	
+
 	for (i = 0; i < XIA_NODES_MAX; i++) {
 		const struct xia_row *row = &src->s_row[i];
 
@@ -497,13 +523,13 @@ static int read_invalid_flag(const char **pp, size_t *pleft, int *invalid_flag)
 
 static inline int ascii_to_int(char ch)
 {
-	if (ch >= '0' && ch <= '9') {
+	if (ch >= '0' && ch <= '9')
 		return ch - '0';
-	} else if (ch >= 'A' && ch <= 'Z') {
-		return ch - 'A' + 10; 
-	} else if (ch >= 'a' && ch <= 'z') {
+	else if (ch >= 'A' && ch <= 'Z')
+		return ch - 'A' + 10;
+	else if (ch >= 'a' && ch <= 'z')
 		return ch - 'a' + 10;
-	} else
+	else
 		return 64;
 }
 
@@ -525,7 +551,7 @@ static int read_name(const char **pp, size_t *pleft, char *name, int len)
 {
 	int i = 0;
 	int last = len - 1;
-	
+
 	BUG_ON(len < 1);
 
 	while (*pleft >= 1 && isname(**pp) && i < last) {
@@ -660,7 +686,7 @@ int xia_pton(const char *src, size_t srclen, struct xia_addr *dst,
 	const char *p = src;
 	size_t left = srclen;
 	int i = 0;
- 
+
 	memset(dst, 0, sizeof(*dst));
 
 	if (read_invalid_flag(&p, &left, invalid_flag))
@@ -687,7 +713,7 @@ int xia_ptoxid(const char *src, size_t srclen, struct xia_xid *dst)
 {
 	const char *p = src;
 	size_t left = srclen;
- 
+
 	if (read_type(&p, &left, &dst->xid_type))
 		return -1;
 	if (read_sep(&p, &left, '-'))
@@ -706,7 +732,7 @@ int xia_ptoid(const char *src, size_t srclen, struct xia_xid *dst)
 {
 	const char *p = src;
 	size_t left = srclen;
- 
+
 	if (read_xid(&p, &left, dst->xid_id))
 		return -1;
 
