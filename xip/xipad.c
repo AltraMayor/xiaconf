@@ -19,25 +19,14 @@ static int usage(void)
  * the same AD?
  */
 	fprintf(stderr,
-"Usage: xip ad addroute ID tbl { local | main } gw XID\n"
-"       xip ad delroute ID tbl { local | main }\n"
-"	xip ad dump tbl { local | main }\n"
+"Usage:	xip ad { addlocal | dellocal } ID\n"
+"	xip ad addroute ID gw XID\n"
+"	xip ad delroute ID\n"
+"	xip ad show { locals | routes }\n"
 "where	ID := HEXDIGIT{20}\n"
-"       XID := PRINCIPAL '-' ID\n"
-"	PRINCIPAL := '0x' NUMBER | STRING\n"
-"	DEV := STRING NUMBER\n");
+"	XID := PRINCIPAL '-' ID\n"
+"	PRINCIPAL := '0x' NUMBER | STRING\n");
 	return -1;
-}
-
-static int get_tbl_id(const char *name)
-{
-	if (!matches(name, "local"))
-		return XRTABLE_LOCAL_INDEX;
-	if (!matches(name, "main"))
-		return XRTABLE_MAIN_INDEX;
-	fprintf(stderr, "Unknow routing table '%s', "
-		"it must be either 'local', or 'main'\n", name);
-	return usage();
 }
 
 static void get_ad(const char *s, struct xia_xid *dst)
@@ -59,9 +48,7 @@ static void get_xid(const char *s, struct xia_xid *dst)
 	}
 }
 
-/* Based on iproute2/ip/iproute.c:iproute_modify. */
-static int addroute(const struct xia_xid *dst, int tbl_id,
-	const struct xia_xid *gw)
+static int modify_local(const struct xia_xid *dst, int to_add)
 {
 	struct {
 		struct nlmsghdr 	n;
@@ -72,33 +59,56 @@ static int addroute(const struct xia_xid *dst, int tbl_id,
 	memset(&req, 0, sizeof(req));
 
 	req.n.nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg));
-	/* XXX Does one really needs all these flags? */
-	req.n.nlmsg_flags = NLM_F_REQUEST|NLM_F_CREATE|NLM_F_EXCL;
-	req.n.nlmsg_type = RTM_NEWROUTE;
-	req.r.rtm_family = AF_XIA;
-	req.r.rtm_table = tbl_id;
-	req.r.rtm_protocol = RTPROT_BOOT;
 
-	if (tbl_id == XRTABLE_LOCAL_INDEX) {
-		req.r.rtm_type = RTN_LOCAL;
-		req.r.rtm_scope = RT_SCOPE_HOST;
+	if (to_add) {
+		/* XXX Does one really needs all these flags? */
+		req.n.nlmsg_flags = NLM_F_REQUEST|NLM_F_CREATE|NLM_F_EXCL;
+		req.n.nlmsg_type = RTM_NEWROUTE;
 	} else {
-		req.r.rtm_type = RTN_UNICAST;
-		req.r.rtm_scope = RT_SCOPE_LINK;
+		req.n.nlmsg_flags = NLM_F_REQUEST;
+		req.n.nlmsg_type = RTM_DELROUTE;
 	}
+
+	req.r.rtm_family = AF_XIA;
+	req.r.rtm_table = XRTABLE_LOCAL_INDEX;
+	req.r.rtm_protocol = RTPROT_BOOT;
+	req.r.rtm_type = RTN_LOCAL;
+	req.r.rtm_scope = RT_SCOPE_HOST;
 
 	req.r.rtm_dst_len = sizeof(*dst);
 	addattr_l(&req.n, sizeof(req), RTA_DST, dst, sizeof(*dst));
-	addattr_l(&req.n, sizeof(req), RTA_GATEWAY, gw, sizeof(*gw));
 
 	if (rtnl_talk(&rth, &req.n, 0, 0, NULL, NULL, NULL) < 0)
 		exit(2);
 	return 0;
 }
 
-/* Based on iproute2/ip/iproute.c:iproute_modify. */
-static int delroute(const struct xia_xid *dst, int tbl_id)
+static int do_local(int argc, char **argv, int to_add)
 {
+	struct xia_xid dst;
+
+	if (argc != 1) {
+		fprintf(stderr, "Wrong number of parameters\n");
+		return usage();
+	}
+	get_ad(argv[0], &dst);
+	return modify_local(&dst, to_add);
+}
+
+static int do_addlocal(int argc, char **argv)
+{
+	return do_local(argc, argv, 1);
+}
+
+static int do_dellocal(int argc, char **argv)
+{
+	return do_local(argc, argv, 0);
+}
+
+/* Based on iproute2/ip/iproute.c:iproute_modify. */
+static int modify_route(const struct xia_xid *dst, const struct xia_xid *gw)
+{
+	int to_add = !!gw;
 	struct {
 		struct nlmsghdr 	n;
 		struct rtmsg 		r;
@@ -108,26 +118,63 @@ static int delroute(const struct xia_xid *dst, int tbl_id)
 	memset(&req, 0, sizeof(req));
 
 	req.n.nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg));
-	req.n.nlmsg_flags = NLM_F_REQUEST;
-	req.n.nlmsg_type = RTM_DELROUTE;
-	req.r.rtm_family = AF_XIA;
-	req.r.rtm_table = tbl_id;
-	req.r.rtm_protocol = RTPROT_BOOT;
 
-	if (tbl_id == XRTABLE_LOCAL_INDEX) {
-		req.r.rtm_type = RTN_LOCAL;
-		req.r.rtm_scope = RT_SCOPE_HOST;
+	if (to_add) {
+		/* XXX Does one really needs all these flags? */
+		req.n.nlmsg_flags = NLM_F_REQUEST|NLM_F_CREATE|NLM_F_EXCL;
+		req.n.nlmsg_type = RTM_NEWROUTE;
+		req.r.rtm_scope = RT_SCOPE_LINK;
 	} else {
-		req.r.rtm_type = RTN_UNICAST;
+		req.n.nlmsg_flags = NLM_F_REQUEST;
+		req.n.nlmsg_type = RTM_DELROUTE;
 		req.r.rtm_scope = RT_SCOPE_NOWHERE;
 	}
+
+	req.r.rtm_family = AF_XIA;
+	req.r.rtm_table = XRTABLE_MAIN_INDEX;
+	req.r.rtm_protocol = RTPROT_BOOT;
+	req.r.rtm_type = RTN_UNICAST;
 
 	req.r.rtm_dst_len = sizeof(*dst);
 	addattr_l(&req.n, sizeof(req), RTA_DST, dst, sizeof(*dst));
 
+	if (to_add)
+		addattr_l(&req.n, sizeof(req), RTA_GATEWAY, gw, sizeof(*gw));
+
 	if (rtnl_talk(&rth, &req.n, 0, 0, NULL, NULL, NULL) < 0)
 		exit(2);
 	return 0;
+}
+
+static int do_addroute(int argc, char **argv)
+{
+	struct xia_xid dst, gw;
+
+	if (argc != 3) {
+		fprintf(stderr, "Wrong number of parameters\n");
+		return usage();
+	}
+	if (strcmp(argv[1], "gw")) {
+		fprintf(stderr, "Wrong parameters\n");
+		return usage();
+	}
+	get_ad(argv[0], &dst);
+	get_xid(argv[2], &gw);
+
+	return modify_route(&dst, &gw);
+}
+
+static int do_delroute(int argc, char **argv)
+{
+	struct xia_xid dst;
+
+	if (argc != 1) {
+		fprintf(stderr, "Wrong number of parameters\n");
+		return usage();
+	}
+	get_ad(argv[0], &dst);
+
+	return modify_route(&dst, NULL);
 }
 
 static struct
@@ -238,59 +285,26 @@ static int dump(int tbl_id)
 	return 0;
 }
 
-static int do_addroute(int argc, char **argv)
+static int do_show(int argc, char **argv)
 {
 	int tbl_id;
-	struct xia_xid dst, gw;
+	char *name;
 
-	if (argc != 5) {
+	if (argc != 1) {
 		fprintf(stderr, "Wrong number of parameters\n");
 		return usage();
 	}
-	if (strcmp(argv[1], "tbl") ||
-	    strcmp(argv[3], "gw")) {
-		fprintf(stderr, "Wrong parameters\n");
+
+	name = argv[0];
+	if (!matches(name, "locals"))
+		tbl_id = XRTABLE_LOCAL_INDEX;
+	else if (!matches(name, "routes"))
+		tbl_id = XRTABLE_MAIN_INDEX;
+	else {
+		fprintf(stderr, "Unknow routing table '%s', it must be either 'locals', or 'routes'\n",
+			name);
 		return usage();
 	}
-	get_ad(argv[0], &dst);
-	tbl_id = get_tbl_id(argv[2]);
-	get_xid(argv[4], &gw);
-
-	return addroute(&dst, tbl_id, &gw);
-}
-
-static int do_delroute(int argc, char **argv)
-{
-	int tbl_id;
-	struct xia_xid dst;
-
-	if (argc != 3) {
-		fprintf(stderr, "Wrong number of parameters\n");
-		return usage();
-	}
-	if (strcmp(argv[1], "tbl")) {
-		fprintf(stderr, "Wrong parameters\n");
-		return usage();
-	}
-	get_ad(argv[0], &dst);
-	tbl_id = get_tbl_id(argv[2]);
-
-	return delroute(&dst, tbl_id);
-}
-
-static int do_dump(int argc, char **argv)
-{
-	int tbl_id;
-
-	if (argc != 2) {
-		fprintf(stderr, "Wrong number of parameters\n");
-		return usage();
-	}
-	if (strcmp(argv[0], "tbl")) {
-		fprintf(stderr, "Wrong parameters\n");
-		return usage();
-	}
-	tbl_id = get_tbl_id(argv[1]);
 
 	return dump(tbl_id);
 }
@@ -304,9 +318,11 @@ static int do_help(int argc, char **argv)
 }
 
 static const struct cmd cmds[] = {
+	{ "addlocal",	do_addlocal	},
+	{ "dellocal",	do_dellocal	},
 	{ "addroute",	do_addroute	},
 	{ "delroute",	do_delroute	},
-	{ "dump",	do_dump		},
+	{ "show",	do_show		},
 	{ "help",	do_help		},
 	{ 0,		0 }
 };
