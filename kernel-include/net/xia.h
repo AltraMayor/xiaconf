@@ -1,5 +1,5 @@
-#ifndef _XIA_H
-#define _XIA_H
+#ifndef _NET_XIA_H
+#define _NET_XIA_H
 
 #include <linux/kernel.h>
 #include <linux/types.h>
@@ -84,11 +84,12 @@ static inline int is_edge_chosen(__u8 e)
 }
 
 /* To be used when flipping bytes isn't necessary. */
-#define be32_to_raw_cpu(n)	((__force __u32)(n))
+#define __be32_to_raw_cpu(n)	((__force __u32)(n))
+#define __raw_cpu_to_be32(n)	((__force __be32)(n))
 
 static inline int is_any_edge_chosen(const struct xia_row *row)
 {
-	return be32_to_raw_cpu(row->s_edge.i) & XIA_CHOSEN_EDGES;
+	return __be32_to_raw_cpu(row->s_edge.i) & XIA_CHOSEN_EDGES;
 }
 
 static inline int is_empty_edge(__u8 e)
@@ -99,7 +100,7 @@ static inline int is_empty_edge(__u8 e)
 static inline int is_it_a_sink(struct xia_row *row, __u8 node, __u8 num_dst)
 {
 	return	node == (num_dst - 1) ||
-		(be32_to_raw_cpu(row->s_edge.i) & XIA_EMPTY_EDGES) ==
+		(__be32_to_raw_cpu(row->s_edge.i) & XIA_EMPTY_EDGES) ==
 			XIA_EMPTY_EDGES;
 }
 
@@ -134,6 +135,13 @@ static inline int xia_is_nat(xid_type_t ty)
 	return ty == XIDTYPE_NAT;
 }
 
+static inline void unmark_xia_addr(struct xia_addr *addr)
+{
+	int i;
+	for (i = 0; i < XIA_NODES_MAX; i++)
+		addr->s_row[i].s_edge.i &= ~XIA_CHOSEN_EDGES;
+}
+
 #ifndef __KERNEL__
 /* XXX This section is only needed to make compiling applications with
  * old kernels' headers installed easier.
@@ -153,72 +161,4 @@ struct sockaddr_xia {
 			sizeof(__u16) - sizeof(struct xia_addr)];
 };
 
-#ifdef __KERNEL__
-
-/*
- *	Sock structs
- */
-
-/** struct xia_sock - representation of XIA sockets
- *
- * @sk - ancestor class
- * XXX Add the needed fields.
- * @pinet6 - pointer to IPv6 control block
- * @inet_daddr - Foreign IPv4 addr
- * @inet_rcv_saddr - Bound local IPv4 addr
- * @inet_dport - Destination port
- * @inet_num - Local port
- * @inet_saddr - Sending source
- * @uc_ttl - Unicast TTL
- * @inet_sport - Source port
- * @inet_id - ID counter for DF pkts
- * @tos - TOS
- * @mc_ttl - Multicasting TTL
- * @is_icsk - is this an inet_connection_sock?
- * @mc_index - Multicast device index
- * @mc_list - Group array
- * @cork - info to build ip hdr on each ip frag while socket is corked
- */
-struct xia_sock {
-	/* sk has to be the first member of xia_sock. */
-	struct sock		sk;
-
-	/* Protocol specific data members per socket from here on. */
-
-	/* XID type, XID, and full address of source socket. */
-	xid_type_t		xia_sxid_type;
-	u8			xia_sxid[XIA_XID_MAX];
-	struct xia_addr		xia_saddr; /* It's used for transmission. */
-
-	/* XID type, and full address of destination socket. */
-	xid_type_t		xia_dxid_type;
-	struct xia_addr		xia_daddr; /* It's used for transmission. */
-};
-
-static inline struct xia_sock *xia_sk(const struct sock *sk)
-{
-	return (struct xia_sock *)sk;
-}
-
-/*
- * Raw socket
- */
-
-struct xia_raw_sock {
-	/* xia_sock has to be the first member */
-	struct xia_sock		xia;
-
-	/* Raw specific data members per socket from here on. */
-
-	/* EMPTY */
-};
-
-static inline struct xia_raw_sock *xia_raw_sk(const struct sock *sk)
-{
-	return (struct xia_raw_sock *)sk;
-}
-
-extern struct proto xia_raw_prot;
-
-#endif	/* __KERNEL__	*/
-#endif	/* _XIA_H	*/
+#endif	/* _NET_XIA_H	*/

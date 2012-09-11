@@ -117,7 +117,7 @@ static inline int xtbl_branch_index(struct fib_xid_table *xtbl,
 		BUG();
 }
 
-static inline struct net *xtbl_net(struct fib_xid_table *xtbl)
+static inline struct net *xtbl_net(const struct fib_xid_table *xtbl)
 {
 	return xtbl->fxt_net;
 }
@@ -135,19 +135,20 @@ struct xia_ppal_rt_eops {
 		struct fib_xia_rtable *rtbl, struct sk_buff *skb,
 		struct netlink_callback *cb);
 
-	/* Optional callback to release dependencies.
+	/* Callback to release dependencies.
 	 *
 	 * NOTE
-	 *	This callback is always called after an RCU synch, so no
-	 *	RCU reader has access to @fxid.
+	 *	This callback is always called after an RCU synch, or some
+	 *	other guarantee such that no RCU reader has access to @fxid.
 	 *
 	 *	This callback may run in atomic context.
 	 *
-	 *	Don't call kfree() on @fxid, it's done once this callback
-	 *	returns.
+	 *	This callback must deallocate @fxid's memory, that is,
+	 *	call a function	like kfree() on @fxid.
 	 *
-	 *	If this callback is defined, consider calling
-	 *	flush_scheduled_work() when unloading your module.
+	 *	If this callback is defined with a function in kernel
+	 *	module, consider calling flush_scheduled_work() when unloading
+	 *	the module.
 	 */
 	free_fxid_t free_fxid;
 };
@@ -189,9 +190,6 @@ static inline struct fib_xia_rtable *xia_fib_get_table(struct net *net, u32 id)
 /*
  * Exported by fib_frontend.c
  */
-
-int xia_fib_init(void);
-void xia_fib_exit(void);
 
 /* xia_register_pernet_subsys - is just a wrapper for
  * register_pernet_subsys in order to guarantee that
@@ -257,7 +255,7 @@ void end_xid_table(struct fib_xia_rtable *rtbl, xid_type_t ty);
 struct fib_xid_table *xia_find_xtbl_rcu(struct fib_xia_rtable *rtbl,
 	xid_type_t ty);
 
-/* Don't call this function directly, use xtbl_put instead. */
+/* Don't call this function directly, call xtbl_put() instead. */
 void xtbl_finish_destroy(struct fib_xid_table *xtbl);
 
 static inline void xtbl_put(struct fib_xid_table *xtbl)
@@ -271,6 +269,7 @@ static inline void xtbl_hold(struct fib_xid_table *xtbl)
 	atomic_inc(&xtbl->refcnt);
 }
 
+/* DO NOT forget to call xtb_put() afterwards! */
 struct fib_xid_table *xia_find_xtbl_hold(struct fib_xia_rtable *rtbl,
 	xid_type_t ty);
 
@@ -295,7 +294,11 @@ void free_fxid(struct fib_xid_table *xtbl, struct fib_xid *fxid);
  *	readers, for example calling synchronize_rcu(), otherwise use
  *	free_fxid.
  */
-void free_fxid_norcu(struct fib_xid_table *xtbl, struct fib_xid *fxid);
+static inline void free_fxid_norcu(struct fib_xid_table *xtbl,
+	struct fib_xid *fxid)
+{
+	xtbl->fxt_eops->free_fxid(xtbl, fxid);
+}
 
 /** xia_find_xid_rcu - Find struct fib_xid in @xtbl that has key @xid.
  * RETURN
@@ -345,8 +348,9 @@ int xia_iterate_xids(struct fib_xid_table *xtbl,
  */
 int fib_add_fxid(struct fib_xid_table *xtbl, struct fib_xid *fxid);
 
-/** fib_add_fxid_locked - Same as fib_add_fxid, but
- *		it assumes that the lock is already held.Add @fxid into @xtbl.
+/** fib_add_fxid_locked - Same as fib_add_fxid, that is,
+ *		it adds @fxid into @xtbl. However, fib_add_fxid_locked
+ *		assumes that the lock is already held.
  * NOTE
  *	BE VERY CAREFUL when calling this function because if the needed lock
  *	is not held, it may corrupt @xtbl!

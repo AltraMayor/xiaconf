@@ -61,9 +61,32 @@ struct hrdw_addr {
 };
 
 struct fib_xid_hid_main {
-	struct fib_xid		xhm_common; /* It must be first field! */
+	struct fib_xid		xhm_common;
 	struct list_head	xhm_haddrs;
+	atomic_t		xhm_refcnt;
+	bool			xhm_dead;
 };
+
+static inline struct fib_xid_hid_main *fxid_mhid(struct fib_xid *fxid)
+{
+	return likely(fxid)
+		? container_of(fxid, struct fib_xid_hid_main, xhm_common)
+		: NULL;
+}
+
+static inline void mhid_hold(struct fib_xid_hid_main *mhid)
+{
+	atomic_inc(&mhid->xhm_refcnt);
+}
+
+/* Don't call this function directly, call mhid_put() instead. */
+void mhid_finish_destroy(struct fib_xid_hid_main *mhid);
+
+static inline void mhid_put(struct fib_xid_hid_main *mhid)
+{
+	if (atomic_dec_and_test(&mhid->xhm_refcnt))
+		mhid_finish_destroy(mhid);
+}
 
 int insert_neigh(struct fib_xid_table *xtbl, const char *xid,
 	struct net_device *dev, const u8 *lladdr);
