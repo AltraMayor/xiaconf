@@ -8,5 +8,6 @@ nat	0x00	# Not A Type
 
 ad	0x10	# Autonomous Domain
 hid	0x11	# Host
-cid	0x12	# Content
-sid	0x13	# Service
+xdp	0x12	# eXpressive Datagram Protocol
+serval	0x13	# Serval
+#cid	0x??	# Content (design and implementation not started)
