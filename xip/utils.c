@@ -26,7 +26,11 @@ int do_cmd(const struct cmd *cmds, const char *entity, const char *help,
 	const char *argv0;
 	const struct cmd *c;
 
-	assert(argc >= 1);
+	if (argc < 1) {
+		fprintf(stderr, "%s not specified, try \"%s\".\n",
+			entity, help);
+		return -1;
+	}
 	argv0 = argv[0];
 
 	for (c = cmds; c->cmd; c++) {

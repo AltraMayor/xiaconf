@@ -329,12 +329,6 @@ static const struct cmd cmds[] = {
 
 int do_ad(int argc, char **argv)
 {
-	if (argc < 1) {
-		/* TODO */
-		fprintf(stderr, "TODO: Implement a default action!\n");
-		return 0;
-	}
-
 	assert(!init_ppal_map());
 	assert(!ll_init_map(&rth));
 	return do_cmd(cmds, "Command", "xip ad help", argc, argv);
