@@ -427,7 +427,8 @@ static inline void reset_filter(void)
 /* XXX This function should be componentized in a library, little variances
  * are repeating themselves. See the same function in xipad.c.
  */
-int print_addr(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
+static int print_addr(const struct sockaddr_nl *who, struct nlmsghdr *n,
+	void *arg)
 {
 	FILE *fp = (FILE*)arg;
 	struct rtmsg *r = NLMSG_DATA(n);
@@ -475,7 +476,7 @@ int print_addr(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
 	if (n->nlmsg_type == RTM_DELROUTE)
 		fprintf(fp, "Deleted ");
 	fprintf(fp, "to ");
-	/* XXX It got to use fp! */
+	/* XXX It got to use @fp! */
 	print_xia_xid(dst);
 	fprintf(fp, "\n");
 
@@ -630,7 +631,8 @@ static int do_delneigh(int argc, char **argv)
 /* XXX This function should be componentized in a library, little variances
  * are repeating themselves. See the same function in xipad.c.
  */
-int print_neigh(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
+static int print_neigh(const struct sockaddr_nl *who, struct nlmsghdr *n,
+	void *arg)
 {
 	FILE *fp = (FILE*)arg;
 	struct rtmsg *r = NLMSG_DATA(n);
@@ -678,7 +680,7 @@ int print_neigh(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
 	if (n->nlmsg_type == RTM_DELROUTE)
 		fprintf(fp, "Deleted ");
 	fprintf(fp, "to ");
-	/* XXX It got to use fp! */
+	/* XXX It got to use @fp! */
 	print_xia_xid(dst);
 	fprintf(fp, "\n");
 
@@ -772,7 +774,7 @@ static const struct cmd cmds[] = {
 	{ "delneigh",	do_delneigh	},
 	{ "showneighs",	do_showneighs	},
 	{ "help",	do_help		},
-	{ 0,		0 }
+	{ 0,		0		}
 };
 
 int do_hid(int argc, char **argv)
