@@ -15,7 +15,7 @@ static int usage(void)
 	fprintf(stderr,
 "Usage: xip [ OPTIONS ] OBJECT { COMMAND | help }\n"
 "       xip [ -force ] -batch filename\n"
-"where  OBJECT := { ad | hid | xdp }\n"
+"where  OBJECT := { ad | dst | hid | xdp }\n"
 "       OPTIONS := { -V[ersion] | -s[tatistics] | -d[etails] |\n"
 "                    -o[neline] | -t[imestamp] | -b[atch] [filename] }\n");
 	return -1;
@@ -31,6 +31,7 @@ static int do_help(int argc, char **argv)
 
 static const struct cmd cmds[] = {
 	{ "ad", 	do_ad	},
+	{ "dst",	do_dst	},
 	{ "hid", 	do_hid	},
 	{ "xdp",	do_xdp	},
 	{ "help",       do_help	},

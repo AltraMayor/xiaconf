@@ -15,7 +15,7 @@
 
 static int usage(void)
 {
-/* XXX Shouldn't  addroute/delroute support multiple gateways for
+/* XXX Shouldn't addroute/delroute support multiple gateways for
  * the same AD?
  */
 	fprintf(stderr,

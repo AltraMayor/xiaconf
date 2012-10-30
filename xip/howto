@@ -31,6 +31,7 @@ gcc -Wall -Wextra -c -I ../kernel-include xiphid.c
 gcc -Wall -Wextra -c ppk.c
 gcc -Wall -Wextra -c -I ../kernel-include dag.c
 gcc -Wall -Wextra -c -I ../kernel-include xipad.c
+gcc -Wall -Wextra -c -I ../kernel-include xipdst.c
 gcc -Wall -Wextra -c -I ../kernel-include xipxdp.c
 gcc -Wall -Wextra -c utils.c
 # libnetlink.c has warning when -Wextra is used.
@@ -38,7 +39,7 @@ gcc -Wall -c libnetlink.c
 gcc -Wall -Wextra -c ll_map.c
 gcc -Wall -Wextra -c xip.c
 gcc -o xip ppk.o ppal_map.o dag.o utils.o libnetlink.o ll_map.o \
-xiphid.o xipad.o xipxdp.o xip.o -lcrypto
+xiphid.o xipad.o xipdst.o xipxdp.o xip.o -lcrypto
 
 ### Clean
 

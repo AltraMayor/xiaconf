@@ -10,5 +10,7 @@ int do_ad(int argc, char **argv);
 int do_hid(int argc, char **argv);
 /* From xipxdp.c */
 int do_xdp(int argc, char **argv);
+/* From xipdst.c */
+int do_dst(int argc, char **argv);
 
 #endif /* HEADER_XIP_COMMON */
