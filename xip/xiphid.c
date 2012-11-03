@@ -85,26 +85,10 @@ static int xid_from_key(struct xia_xid *xid, char *ppal, PPK_KEY *pkey)
 	return 0;
 }
 
-/* Obtain a DAG of the key pair. */
-static int create_hid_addr(PPK_KEY *pkey, struct xia_addr *addr)
-{
-	struct xia_row *row = &addr->s_row[0];
-	int rc;
-
-	memset(addr, 0, sizeof(*addr));
-
-	rc = xid_from_key(&row->s_xid, "hid", pkey);
-	if (rc)
-		return rc;
-
-	/* Set entry node. */
-	row->s_edge.i = XIA_EMPTY_EDGES;
-	row->s_edge.a[0] = 0;
-
-	return 0;
-}
-
 /* write_new_hid_file - generates a new HID and save to @filename.
+ *
+ *	In fact, all that is genereaged is a private key.
+ *
  *
  * RETURN
  *	returns zero on success; otherwise a negative number.
@@ -113,8 +97,6 @@ static int write_new_hid_file(const char *filename)
 {
 	FILE *f;
 	PPK_KEY *pkey;
-	struct xia_addr addr;
-	char buf[XIA_MAX_STRADDR_SIZE];
 	int rc;
 
 	rc = -1;
@@ -126,15 +108,6 @@ static int write_new_hid_file(const char *filename)
 	pkey = gen_keys();
 	if (!pkey)
 		goto close_f;
-
-	rc = create_hid_addr(pkey, &addr);
-	if (rc)
-		goto pkey;
-	
-	rc = xia_ntop(&addr, buf, sizeof(buf), 1);
-	if (rc < 0)
-		goto pkey;
-	fprintf(f, "%s\n\n", buf);
 
 	rc = write_prvpem(pkey, f);
 	if (rc)
@@ -168,117 +141,59 @@ static int do_newhid(int argc, char **argv)
 	return 0;
 }
 
-static char *split_buf(char *buf, int len)
+/* read_prv_key_from_file - load @filename into @ppkey.
+ * (*ppkey) must not be allocated; it'll be allocated if no error is found.
+ *
+ * RETURN
+ *	returns zero on success; otherwise a negative number.
+ */
+static int read_prv_key_from_file(const char *filename, PPK_KEY **ppkey)
 {
-	char *p = buf;
-	int left = len;
-	int empty = 1;
-
-	while (left > 0) {
-		if (*p == '\n') {
-			if (empty) {
-				*p = '\0';
-				return (p + 1);
-			} else {
-				empty = 1;
-			}
-		} else
-			empty = 0;
-		p++; left--;
-	}
-
-	return NULL;
-}
-
-static int read_and_split_buf(const char *filename, char *buf, int *plen,
-	char **psecond_half, int *second_half_len)
-{
-	int rc = -1;
-	FILE *f;
-	int bufsize = *plen;
-	int len;
-	char *sec_half;
-
-	f = fopen(filename, "r");
-	if (!f)
-		goto out;
-
-	len = fread(buf, 1, bufsize, f);
-	assert(len < bufsize);
-	sec_half = split_buf(buf, len);
-	if (!sec_half)
-		goto close_f;
-
-	*plen = len;
-	*psecond_half = sec_half;
-	*second_half_len = len - (sec_half - buf);
-	rc = 0;
-
-close_f:
-	fclose(f);
-out:
-	return rc;
-}
-
 #define HID_FILE_BUFFER_SIZE (8*1024)
 
-static int parse_and_validate_addr(char *str, struct xia_addr *addr)
-{
-	int invalid_flag;
-	int rc;
+	FILE *f;
+	char buf[HID_FILE_BUFFER_SIZE];
+	int len;
 
-	rc = xia_pton(str, INT_MAX, addr, 0, &invalid_flag);
-	if (rc < 0) {
-		fprintf(stderr, "Syntax error: invalid address: [[%s]]\n", str);
-		return rc;
-	}
-	rc = xia_test_addr(addr);
-	if (rc < 0) {
-		char buf[XIA_MAX_STRADDR_SIZE];
-		assert(xia_ntop(addr, buf, XIA_MAX_STRADDR_SIZE, 1) >= 0);
-		fprintf(stderr, "Invalid address (%i): [[%s]] "
-			"as seen by xia_xidtop: [[%s]]\n", -rc, str, buf);
-		return rc;
-	}
-	if (invalid_flag) {
-		fprintf(stderr, "Although valid, address has invalid flag: "
-			"[[%s]]\n", str);
+	/* Read private key. */
+	f = fopen(filename, "r");
+	if (!f)
 		return -1;
-	}
-	return 0;
+	len = fread(buf, 1, HID_FILE_BUFFER_SIZE, f);
+	assert(len < HID_FILE_BUFFER_SIZE);
+	fclose(f);
+
+	*ppkey = pkey_of_prvpem(buf, len);
+	return *ppkey ? 0 : -1;
 }
 
 /* write_pub_hid_file - reads @infilename, a file with the private key, and
- * writes @outf a file with the public key.
+ * writes @outf a file with the HID, and its public key.
  *
  * RETURN
  *	returns zero on success; otherwise a negative number.
  */
 static int write_pub_hid_file(const char *infilename, FILE *outf)
 {
-	char buf[HID_FILE_BUFFER_SIZE];
-	int buflen;
-	char *prvpem;
-	int prvpem_len;
 	PPK_KEY *pkey;
-	struct xia_addr addr;
+	struct xia_xid xid;
+	char buf[XIA_MAX_STRXID_SIZE];
 	int rc;
 	
-	buflen = sizeof(buf);
-	rc = read_and_split_buf(infilename, buf, &buflen, &prvpem, &prvpem_len);
+	rc = read_prv_key_from_file(infilename, &pkey);
 	if (rc)
 		goto out;
 
-	rc = parse_and_validate_addr(buf, &addr);
+	/* Print XID. */
+	rc = xid_from_key(&xid, "hid", pkey);
 	if (rc)
-		goto out;
+		goto pkey;
+	rc = xia_xidtop(&xid, buf, sizeof(buf));
+	if (rc < 0)
+		goto pkey;
+	fprintf(outf, "%s\n\n", buf);
 
-	rc = -1;
-	pkey = pkey_of_prvpem(prvpem, prvpem_len);
-	if (!pkey)
-		goto out;
-	
-	fprintf(outf, "%s\n", buf);
+	/* Print public key. */
 	rc = write_pubpem(pkey, outf);
 	if (rc)
 		goto pkey;
@@ -304,39 +219,6 @@ static int do_getpub(int argc, char **argv)
 		fprintf(stderr, "Couldn't create public HID file\n");
 		return -1;
 	}
-
-	return 0;
-}
-
-/* read_hid_file - load @filename into @addr and @ppkey.
- * (*ppkey) must not be allocated; it'll be allocated if no error is found.
- * @is_prv must be true if the file holds a private key.
- *
- * RETURN
- *	returns zero on success; otherwise a negative number.
- */
-static int read_hid_file(const char *filename, int is_prv,
-		struct xia_addr *addr, PPK_KEY **ppkey)
-{
-	int rc = -1;
-	char buf[HID_FILE_BUFFER_SIZE];
-	int buflen;
-	char *pem;
-	int pem_len;
-
-	buflen = sizeof(buf);
-	rc = read_and_split_buf(filename, buf, &buflen, &pem, &pem_len);
-	if (rc)
-		return rc;
-
-	rc = parse_and_validate_addr(buf, addr);
-	if (rc)
-		return rc;
-
-	*ppkey = is_prv ?	pkey_of_prvpem(pem, pem_len):
-				pkey_of_pubpem(pem, pem_len);
-	if (!*ppkey)
-		return rc;
 
 	return 0;
 }
@@ -380,7 +262,6 @@ static int do_Xaddr_common(int argc, char **argv, int to_add)
 {
 	struct xia_xid xid;
 	char ffn[PATH_MAX];
-	struct xia_addr addr;
 	PPK_KEY *pkey;
 
 	if (argc != 1) {
@@ -389,14 +270,11 @@ static int do_Xaddr_common(int argc, char **argv, int to_add)
 	}
 	
 	get_ffn(ffn, argv[0]);
-	if (read_hid_file(ffn, 1, &addr, &pkey)) {
+	if (read_prv_key_from_file(ffn, &pkey)) {
 		fprintf(stderr, "Couldn't read private HID file\n");
 		return -1;
 	}
 
-	/* XXX @addr isn't being used here because the hid files kept in /etc
-	 * are going to be changed to support network prefixes.
-	 */
 	assert(!xid_from_key(&xid, "hid", pkey));
 	ppk_free_key(pkey);
 
