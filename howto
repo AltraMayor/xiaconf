@@ -4,15 +4,11 @@
 install -oroot -groot -m700 xip/xip /sbin
 
 cp -r etc-production/xia /etc
+mkdir -p /etc/xia/hid/{prv,tmp}
 chown root:root -R /etc/xia
-
-# This is redundant, it's here for security. Remove when creating a package.
 chmod 700 -R /etc/xia
 
-chmod 755 /etc/xia /etc/xia/hid /etc/xia/hid/pub
-chmod 644 /etc/xia/hid/pub/*
-chmod 700 /etc/xia/hid/prv
-chmod 600 /etc/xia/hid/prv/*
+chmod 755 /etc/xia
 chmod 644 /etc/xia/principals
 
 # CScope

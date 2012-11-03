@@ -23,7 +23,7 @@ gcc -o test_ppal_map ppal_map.o dag.o test_ppal_map.o
 gcc -Wall -Wextra -c -I ../kernel-include \
 -DPRINCIPAL_FILENAME=\"../etc-test/xia/principals\" ppal_map.c
 gcc -Wall -Wextra -c -I ../kernel-include \
--DHID_PRV_PATH=\"../etc-test/xia/hid/prv/\" xiphid.c
+-DHID_PATH=\"../etc-test/xia/hid/\" xiphid.c
 # Production
 gcc -Wall -Wextra -c -I ../kernel-include ppal_map.c
 gcc -Wall -Wextra -c -I ../kernel-include xiphid.c

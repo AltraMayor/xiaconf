@@ -2,6 +2,9 @@
 #include <limits.h>
 #include <string.h>
 #include <assert.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <asm/byteorder.h>
 #include <asm-generic/errno-base.h>
 #include <net/xia.h>
@@ -26,8 +29,8 @@
 #include "ppal_map.h"
 #include "ll_map.h"
 
-#ifndef HID_PRV_PATH
-#define HID_PRV_PATH "/etc/xia/hid/prv/"
+#ifndef HID_PATH
+#define HID_PATH "/etc/xia/hid/"
 #endif
 
 static int usage(void)
@@ -48,21 +51,19 @@ static int usage(void)
 
 /* get_ffn - obtains Final FileName.
  *
+ * IMPORTANT
+ *
  * @ffn must be at least PATH_MAX (available in <limits.h>).
  *
- * If @filename includes a '/', it assumes to be a filename with full path,
- * otherwise it assumes it is to be stored in the default configuration path.
+ * @filename must not include '/'.
  */
-static void get_ffn(char *ffn, const char *filename)
+static void get_ffn(char *ffn, int ffn_len, int is_prv, const char *filename)
 {
-	if (strchr(filename, '/')) {
-		strncpy(ffn, filename, PATH_MAX);
-		ffn[PATH_MAX - 1] = '\0';
-	} else {
-		int left = PATH_MAX - strlen(HID_PRV_PATH) - 1;
-		strcpy(ffn, HID_PRV_PATH);
-		strncat(ffn, filename, left);
-	}
+	assert(!strchr(filename, '/'));
+	assert(
+		snprintf(ffn, ffn_len, "%s%s/%s",
+			HID_PATH, is_prv ? "prv" : "tmp", filename)
+		< ffn_len);
 }
 
 static int xid_from_key(struct xia_xid *xid, char *ppal, PPK_KEY *pkey)
@@ -89,6 +90,8 @@ static int xid_from_key(struct xia_xid *xid, char *ppal, PPK_KEY *pkey)
  *
  *	In fact, all that is genereaged is a private key.
  *
+ *	File is flushed before being closed to guarantee that
+ *	it is written.
  *
  * RETURN
  *	returns zero on success; otherwise a negative number.
@@ -97,47 +100,55 @@ static int write_new_hid_file(const char *filename)
 {
 	FILE *f;
 	PPK_KEY *pkey;
-	int rc;
+	int fd, rc;
 
-	rc = -1;
-	f = fopen(filename, "w");
-	if (!f)
-		goto out;
+	fd = creat(filename, 0600);
+	if (fd < 0) {
+		perror("Couldn't create new HID file");
+		return -1;
+	}
+	f = fdopen(fd, "w");
+	assert(f);
 
-	rc = -ENOMEM;
 	pkey = gen_keys();
-	if (!pkey)
+	if (!pkey) {
+		rc = -ENOMEM;
 		goto close_f;
+	}
 
 	rc = write_prvpem(pkey, f);
 	if (rc)
 		goto pkey;
 
-	rc = 0;
+	assert(!fflush(f));
 
 pkey:
 	ppk_free_key(pkey);
 close_f:
 	fclose(f);
-out:
 	return rc;
 }
 
 static int do_newhid(int argc, char **argv)
 {
-	char ffn[PATH_MAX];
+	char tmp_ffn[PATH_MAX], prv_ffn[PATH_MAX];
 
 	if (argc != 1) {
 		fprintf(stderr, "Wrong number of parameters\n");
 		return usage();
 	}
 	
-	get_ffn(ffn, argv[0]);
-	if (write_new_hid_file(ffn)) {
-		perror("Couldn't create new HID file");
+	/* Write new HID file to tmp path. */
+	get_ffn(tmp_ffn, sizeof(tmp_ffn), 0, argv[0]);
+	if (write_new_hid_file(tmp_ffn))
 		return -1;
-	}
 
+	/* Once file is fully written, move it to its final path. Thus,
+	 * if the underlying file system has attomic metadata,
+	 * all files in the final path are always consistent.
+	 */
+	get_ffn(prv_ffn, sizeof(prv_ffn), 1, argv[0]);
+	assert(!rename(tmp_ffn, prv_ffn));
 	return 0;
 }
 
@@ -214,7 +225,7 @@ static int do_getpub(int argc, char **argv)
 		return usage();
 	}
 	
-	get_ffn(ffn, argv[0]);
+	get_ffn(ffn, sizeof(ffn), 1, argv[0]);
 	if (write_pub_hid_file(ffn, stdout)) {
 		fprintf(stderr, "Couldn't create public HID file\n");
 		return -1;
@@ -269,7 +280,7 @@ static int do_Xaddr_common(int argc, char **argv, int to_add)
 		return usage();
 	}
 	
-	get_ffn(ffn, argv[0]);
+	get_ffn(ffn, sizeof(ffn), 1, argv[0]);
 	if (read_prv_key_from_file(ffn, &pkey)) {
 		fprintf(stderr, "Couldn't read private HID file\n");
 		return -1;
