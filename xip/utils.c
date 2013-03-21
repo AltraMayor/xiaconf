@@ -108,7 +108,7 @@ int makeargs(char *line, char *argv[], int maxargs)
 	return argc;
 }
 
-int lladdr_ntop(unsigned char *lladdr, int alen, char *buf, int blen)
+int lladdr_ntop(const unsigned char *lladdr, int alen, char *buf, int blen)
 {
 	int i;
 	char *sep = "";
@@ -136,9 +136,9 @@ static inline int hexd_to_val(int ch)
 	return -1;
 }
 
-int lladdr_pton(char *str, char *lladdr, int alen)
+int lladdr_pton(const char *str, unsigned char *lladdr, int alen)
 {
-	char *p = str;	/* String cursor.				*/
+	const char *p = str;	/* String cursor.			*/
 	int v;		/* Temporary value.				*/
 	int octet;	/* The octet being unconvered.			*/
 	int digit = 0;	/* State of the machine.			*/
@@ -189,7 +189,7 @@ int lladdr_pton(char *str, char *lladdr, int alen)
 	 *	2. There's a more octet to add, but @lladdr is full.
 	 *	3. No octet was found.
 	 */
-	if (*p || (digit && alen <= 0) || (count == 0))
+	if (*p || (digit && alen <= 0) || (!digit && !count))
 		return -1;
 
 	if (digit) {

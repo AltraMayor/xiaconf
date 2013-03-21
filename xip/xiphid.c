@@ -430,8 +430,8 @@ static void get_hid(const char *s, struct xia_xid *dst)
 	assert(!ppal_name_to_type("hid", &dst->xid_type));
 }
 
-static int modify_neigh(struct xia_xid *dst, char *lladdr, int lladdr_len,
-	unsigned oif, int to_add)
+static int modify_neigh(struct xia_xid *dst, unsigned char *lladdr,
+	int lladdr_len, unsigned oif, int to_add)
 {
 	struct {
 		struct nlmsghdr 	n;
@@ -473,7 +473,7 @@ static int do_Xneigh_common(int argc, char **argv, int to_add)
 {
 	struct xia_xid dst;
 	char *str_lladdr;
-	char lladdr[MAX_ADDR_LEN];
+	unsigned char lladdr[MAX_ADDR_LEN];
 	int lladdr_len;
 	const char *dev;
 	unsigned oif;

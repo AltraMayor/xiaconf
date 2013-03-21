@@ -35,7 +35,7 @@ int makeargs(char *line, char *argv[], int maxargs);
  * RETURN
  *	Return zero if success; otherwise a negative number.
  */
-int lladdr_ntop(unsigned char *lladdr, int alen, char *buf, int blen);
+int lladdr_ntop(const unsigned char *lladdr, int alen, char *buf, int blen);
 
 /** lladdr_pton - convert @str, a NULL-terminated string, into
  *		its corresponding link layer address and stores it in @lladdr.
@@ -43,6 +43,6 @@ int lladdr_ntop(unsigned char *lladdr, int alen, char *buf, int blen);
  * RETURN
  *	Return the length of @lladdr if success; otherwise a negative number.
  */
-int lladdr_pton(char *str, char *lladdr, int alen);
+int lladdr_pton(const char *str, unsigned char *lladdr, int alen);
 
 #endif /* HEADER_UTILS_H */
