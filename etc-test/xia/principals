@@ -2,13 +2,19 @@
 #
 # Latest version is available from git://github.com/AltraMayor/xiaconf.git
 
-nat	0x00	# Not A Type
+nat		0x00	# Not A Type
 
 # 0x01--0x0f reserved for future use
 
-ad	0x10	# Autonomous Domain
-hid	0x11	# Host
-xdp	0x12	# eXpressive Datagram Protocol
-serval	0x13	# Serval
+ad		0x10	# Autonomous Domain
+hid		0x11	# Host
+cid		0x12	# Content
+sid		0x13	# Service
+united4id	0x14	# United 4ID
+4id		0x15	# XIP over IP
+u4id		0x16	# XIP over UDP
+xdp		0x17	# eXpressive Datagram Protocol
+serval		0x18	# Serval
+flowid		0x19	# Serval's flowID
 
 a234567890123456789012345678901234567890 99
