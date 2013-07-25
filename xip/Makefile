@@ -26,7 +26,7 @@ $(PPAL_OBJ_TEST) : ADD_CFLAGS = -Wextra -I ../kernel-include \
 -DPRINCIPAL_FILENAME=\"../etc-test/xia/principals\"
 
 
-all : xip test_flags_xip test_flags_test_ppal_map test_ppk
+all : xip test_flags_xip test_ppal_map test_flags_test_ppal_map test_ppk
 
 
 
@@ -37,10 +37,10 @@ test_flags_xip : $(XIP_OBJ) $(XIP_OBJ_TEST)
 	$(CC) -o $@ $^ -lcrypto
 
 test_ppal_map : $(PPAL_OBJ) $(PPAL_OBJ_PROD)
-	$(CC) -o $@ $^ -lcrypto
+	$(CC) -o $@ $^
 
 test_flags_test_ppal_map : $(PPAL_OBJ) $(PPAL_OBJ_TEST)
-	$(CC) -o $@ $^ -lcrypto
+	$(CC) -o $@ $^
 
 test_ppk : $(PPK_OBJ)
 	$(CC) -o $@ $^ -lcrypto
