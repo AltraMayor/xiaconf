@@ -1,6 +1,6 @@
 ### Intall
 
-# Compile xip, see howto file in folder xip.
+# Compile xip, see Makefile file in folder xip.
 install -oroot -groot -m700 xip/xip /sbin
 
 cp -r etc-production/xia /etc
