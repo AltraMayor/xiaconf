@@ -3,11 +3,6 @@
 
 #include <net/xia.h>
 
-#ifdef __KERNEL__
-#include <net/dst.h>
-#include <net/xia_dst_table.h>
-#endif
-
 #define XIP_MIN_MTU	1024
 
 struct xiphdr {
@@ -84,6 +79,8 @@ struct xip_dst_cachinfo {
 
 #ifdef __KERNEL__
 
+#include <net/dst.h>
+
 static inline struct xiphdr *xip_hdr(const struct sk_buff *skb)
 {
 	return (struct xiphdr *)skb_network_header(skb);
@@ -93,10 +90,22 @@ struct xip_dst_anchor {
 	struct hlist_head	heads[XIA_OUTDEGREE_MAX];
 };
 
-/* xdst_free_anchor - release all struct xip_dst entries that are attached
+#define XDST_ANCHOR_INIT { \
+	.heads[BUILD_BUG_ON_ZERO(XIA_OUTDEGREE_MAX != 4)] = HLIST_HEAD_INIT, \
+	.heads[1] = HLIST_HEAD_INIT, \
+	.heads[2] = HLIST_HEAD_INIT, \
+	.heads[3] = HLIST_HEAD_INIT, }
+
+/** xdst_init_anchor - initialize @anchor. */
+void xdst_init_anchor(struct xip_dst_anchor *anchor);
+
+/** xdst_free_anchor - release all struct xip_dst entries that are attached
  *			to @anchor.
  * NOTE
  *	IMPORTANT! Caller must RCU synch before calling this function.
+ *
+ *	This function does NOT free @anchor's memory itself, but
+ *	attached structs to @anchor.
  *
  *	This function is meant to be called by the host of
  *	struct xip_dst_anchor, NOT by the code that manipulates
@@ -104,7 +113,7 @@ struct xip_dst_anchor {
  */
 void xdst_free_anchor(struct xip_dst_anchor *anchor);
 
-/* xdst_invalidate_redirect - invalidate DST entries that rely on the redirect
+/** xdst_invalidate_redirect - invalidate DST entries that rely on the redirect
  *	from <@from_type, @from_xid> to @to.
  *
  * NOTE
@@ -161,7 +170,7 @@ void xdst_attach_to_anchor(struct xip_dst *xdst, int index,
 
 static inline struct xip_dst *dst_xdst(struct dst_entry *dst)
 {
-	return dst ? container_of(dst, struct xip_dst, dst) : NULL;
+	return likely(dst) ? container_of(dst, struct xip_dst, dst) : NULL;
 }
 
 static inline struct xip_dst *skb_xdst(struct sk_buff *skb)
@@ -183,7 +192,9 @@ extern struct dst_ops xip_dst_ops_template;
 static inline struct net *dstops_net(struct dst_ops *ops)
 {
 	BUG_ON(ops == &xip_dst_ops_template);
-	return container_of(ops, struct net, xia.xip_dst_ops);
+	return likely(ops)
+		? container_of(ops, struct net, xia.xip_dst_ops)
+		: NULL;
 }
 
 static inline struct net *xdst_net(struct xip_dst *xdst)
@@ -213,18 +224,29 @@ void clear_xdst_table(struct net *net);
 
 /* Possible returns for method @main_deliver in struct xip_route_proc. */
 enum XRP_ACTION {
-	/* XID is unknown, this action forces another edge of an address be
-	 * considered, or to discard a packet if there's no more edges.
-	 * IMPORTANT: The callee must add a negative dependency
-	 * at @anchor_index in @xdst before returning.
+	/* If an XID is unknown, this action forces another edge of
+	 * an address to be considered, or to discard a packet if there's no
+	 * more edges.
+	 *
+	 * IMPORTANT
+	 * The callee must add @xdst at @anchor_index to an anchor before
+	 * returning, in other workds, the callee must implement
+	 * negative dependency.
 	 */
 	XRP_ACT_NEXT_EDGE = 0,
 
-	/* Parameter @next_xid has received a new XID. */
+	/* Parameter @next_xid received a new XID which will, in fact, handle
+	 * the edge being routed.
+	 */
 	XRP_ACT_REDIRECT,
 
-	/* @xdst was filled, the packet is ready to be forwarded.
-	 * Positive dependency must have been added to @xdst.
+	/* If an XID is known, fill up @xdst's fields to make it ready
+	 * to forward packets.
+	 *
+	 * IMPORTANT
+	 * The callee must add @xdst at @anchor_index to an anchor before
+	 * returning, in other workds, the callee must implement
+	 * positive dependency.
 	 */
 	XRP_ACT_FORWARD,
 
@@ -237,37 +259,32 @@ enum XRP_ACTION {
 
 /* Route processing per principal. */
 struct xip_route_proc {
-	/* Attachment to bucket list. */
-	struct hlist_node	xrp_list;
-
 	/* Principal type. */
 	xid_type_t		xrp_ppal_type;
-
-	/* If @xid is local for this principal, this method adds @xdst to
-	 * @xid's anchor (positive dependency), fills @xdst's fields, and
-	 * return zero.
-	 *
-	 * Otherwise, this method adds @xdst to a negative anchor of @xid
-	 * (negative dependency), and returns -ENOENT.
-	 */
-	int (*local_deliver)(struct xip_route_proc *rproc, struct net *net,
-		const u8 *xid, int anchor_index, struct xip_dst *xdst);
 
 	/* The return must be enum XRP_ACTION.
 	 * Only non-local XIDs go through this method.
 	 */
-	int (*main_deliver)(struct xip_route_proc *rproc, struct net *net,
+	int (*deliver)(struct xip_route_proc *rproc, struct net *net,
 		const u8 *xid, struct xia_xid *next_xid, int anchor_index,
 		struct xip_dst *xdst);
 };
 
 /** xip_add_router - Add @rproc to XIA routing mechanism.
+ *
  * RETURN
  *	Zero on success; otherwise a negative error number.
+ *
+ * NOTE
+ *	The XID type must be registered with virtual XID types.
  */
 int xip_add_router(struct xip_route_proc *rproc);
 
-/** xip_add_router - Remove @rproc from XIA routing mechanism. */
+/** xip_add_router - Remove @rproc from XIA routing mechanism.
+ *
+ * NOTE
+ *	The XID type must be registered with virtual XID types.
+ */
 void xip_del_router(struct xip_route_proc *rproc);
 
 struct xip_dst *xip_mark_addr_and_get_dst(struct net *net,

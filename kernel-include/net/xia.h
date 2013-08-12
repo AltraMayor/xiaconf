@@ -9,7 +9,9 @@
 #ifdef __KERNEL__
 #include <net/sock.h>
 #else
-#define BUILD_BUG_ON(x)
+#include <assert.h>
+#define BUG_ON(b) assert(!(b))
+#define BUILD_BUG_ON(condition) ((void)sizeof(char[1 - 2*!!(condition)]))
 #define __force
 #endif
 
@@ -140,6 +142,14 @@ static inline void unmark_xia_addr(struct xia_addr *addr)
 	int i;
 	for (i = 0; i < XIA_NODES_MAX; i++)
 		addr->s_row[i].s_edge.i &= ~XIA_CHOSEN_EDGES;
+}
+
+static inline void unmark_xia_rows(struct xia_row *addr, unsigned int n)
+{
+	unsigned int i;
+	BUG_ON(n >= XIA_NODES_MAX);
+	for (i = 0; i < n; i++)
+		addr[i].s_edge.i &= ~XIA_CHOSEN_EDGES;
 }
 
 #ifndef __KERNEL__
