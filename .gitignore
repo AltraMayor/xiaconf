@@ -35,6 +35,11 @@ modules.builtin
 *.gcno
 
 #
+# Libraries' files
+#
+libxia.so.*
+
+#
 # Top-level generic files
 #
 /tags

@@ -1,7 +1,14 @@
 ### Intall
 
-# Compile xip, see Makefile file in folder xip.
+# Compile libxia and xip.
+# See Makefile files in respective folders.
+# IMPORTANT: compile libxia before xip.
+
 install -oroot -groot -m700 xip/xip /sbin
+install -oroot -groot -m644 libxia/libxia.so.0.0 /usr/lib
+
+# Install libxia.so.
+ldconfig
 
 cp -r etc-production/xia /etc
 mkdir -p /etc/xia/hid/{prv,tmp}

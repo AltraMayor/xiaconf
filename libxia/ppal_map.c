@@ -8,10 +8,6 @@
 
 #include "ppal_map.h"
 
-#ifndef PRINCIPAL_FILENAME
-#define PRINCIPAL_FILENAME	"/etc/xia/principals"
-#endif
-
 static void add_map(const char *name, xid_type_t type)
 {
 	int rc = ppal_add_map(name, type);
@@ -46,7 +42,7 @@ static int is_blank(const char *str)
 }
 
 #define BUF_SIZE 256
-static int load_ppal_map(void)
+static int load_ppal_map(const char *ppal_file)
 {
 	FILE *f;
 	/* buf and name must have the same size to properly handle cases like
@@ -55,10 +51,9 @@ static int load_ppal_map(void)
 	char buf[BUF_SIZE], name[BUF_SIZE];
 	char format1[64], format2[64];
 
-	f = fopen(PRINCIPAL_FILENAME, "r");
+	f = fopen(ppal_file, "r");
 	if (!f) {
-		fprintf(stderr, "Warning: couldn't read file: %s\n",
-			PRINCIPAL_FILENAME);
+		fprintf(stderr, "Warning: couldn't read file: %s\n", ppal_file);
 		return -1;
 	}
 
@@ -87,7 +82,7 @@ static int load_ppal_map(void)
 			continue;
 		if (sscanf(buf, format2, name, &cpu_ty) < 2) {
 			fprintf(stderr, "Warning: %s: invalid input: %s\n",
-				PRINCIPAL_FILENAME, buf);
+				ppal_file, buf);
 			continue;
 		}
 
@@ -97,9 +92,11 @@ static int load_ppal_map(void)
 	return 0;
 }
 
-int init_ppal_map(void)
+int init_ppal_map(const char *ppal_file)
 {
-	return load_ppal_map();
+	if (!ppal_file)
+		ppal_file = "/etc/xia/principals";
+	return load_ppal_map(ppal_file);
 }
 
 void print_xia_addr(const struct xia_addr *addr)

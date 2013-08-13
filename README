@@ -1,2 +1,5 @@
-xiaconf is a analogue of iproute2 for XIA, that is, xiaconf is
-a collection of utilities for controlling an XIA stack.
+xiaconf is XIA's analogue of IP's iproute2, that is,
+xiaconf is a collection of utilities for controlling an XIA stack.
+
+This project also includes libxia, a library meant to help developing or
+porting network applications to XIA.

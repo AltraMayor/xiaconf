@@ -213,6 +213,6 @@ static const struct cmd cmds[] = {
 
 int do_dst(int argc, char **argv)
 {
-	assert(!init_ppal_map());
+	assert(!init_ppal_map(NULL));
 	return do_cmd(cmds, "Command", "xip dst help", argc, argv);
 }

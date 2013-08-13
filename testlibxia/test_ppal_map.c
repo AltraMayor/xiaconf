@@ -7,7 +7,7 @@
 int main(void)
 {
 	xid_type_t ty;
-	assert(!init_ppal_map());
+	assert(!init_ppal_map("../etc-test/xia/principals"));
 
 	assert(!ppal_name_to_type("nat", &ty));
 	assert(!ppal_name_to_type("hid", &ty));
