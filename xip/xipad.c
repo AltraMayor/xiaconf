@@ -2,15 +2,12 @@
 #include <string.h>
 #include <assert.h>
 #include <limits.h>
-#include <net/xia.h>
 #include <net/xia_fib.h>
-#include <net/xia_dag.h>
+#include <xia_socket.h>
 
 #include "xip_common.h"
 #include "utils.h"
 #include "libnetlink.h"
-#include "xia_socket.h"
-#include "ppal_map.h"
 #include "ll_map.h"
 
 static int usage(void)

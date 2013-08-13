@@ -7,9 +7,8 @@
 #include <fcntl.h>
 #include <asm/byteorder.h>
 #include <asm-generic/errno-base.h>
-#include <net/xia.h>
-#include <net/xia_dag.h>
 #include <net/xia_fib.h>
+#include <xia_socket.h>
 
 /* XXX <sys/socket.h> is included before <net/xia_hid.h> because it adds
  * <linux/netdevice.h>, which, in turn, adds <linux/if.h>, and struct ifreq
@@ -22,11 +21,9 @@
 #include <net/xia_hid.h>
 
 #include "xip_common.h"
-#include "xia_socket.h"
 #include "libnetlink.h"
 #include "ppk.h"
 #include "utils.h"
-#include "ppal_map.h"
 #include "ll_map.h"
 
 #ifndef HID_PATH

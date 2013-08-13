@@ -3,11 +3,10 @@
 #include <assert.h>
 #include <net/xia_fib.h>
 #include <net/xia_route.h>
+#include <xia_socket.h>
 
 #include "xip_common.h"
-#include "xia_socket.h"
 #include "utils.h"
-#include "ppal_map.h"
 #include "libnetlink.h"
 
 static int usage(void)
