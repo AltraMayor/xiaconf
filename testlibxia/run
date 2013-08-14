@@ -1,0 +1,14 @@
+#!/bin/bash
+
+E_BADARGS=85
+
+if [ ! -n "$1" ]
+then
+  echo "Usage: `basename $0` program argument1 argument2 etc."
+  exit $E_BADARGS
+fi
+
+PROG=./$1
+shift
+
+LD_LIBRARY_PATH=../libxia $PROG $@
