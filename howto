@@ -19,4 +19,4 @@ chmod 755 /etc/xia
 chmod 644 /etc/xia/principals
 
 # CScope
-cscope -b -q -R -Ikernel-include -sxip
+cscope -b -q -R -Ikernel-include -Iinclude -sxip -slibxia -stestlibxia

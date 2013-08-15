@@ -1,2 +1,14 @@
-- Review the whole code to remove duplicate functions between principals
-- Simplify the NTNL interface, and keep it to a minimum
+- Adopt libmnl (http://netfilter.org/projects/libmnl/) and
+  drop libnetlink.{h,c}.
+  Once this is done, GCC's -Wextra should be the default for the project.
+
+- Review the whole code to remove duplicate functions between principals.
+  Most of the RTNL communication should be generalized.
+
+- Siplify Makefile making -DHID_PATH=\"../etc-test/xia/hid/\" a parameter
+  to xip like what was done with --ppal-map.
+  Once this is done, add this new parameter to script test.xip.
+
+- ppk should become part of libxia. Once this is done, test_ppk should go to
+  testlibxia, and Makefile simplified: drop ppk.o, test_ppk.o, -lcrypto,
+  and "-L ../libxia -lxia" becomes default.
