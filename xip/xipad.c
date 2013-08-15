@@ -8,7 +8,6 @@
 #include "xip_common.h"
 #include "utils.h"
 #include "libnetlink.h"
-#include "ll_map.h"
 
 static int usage(void)
 {
@@ -287,7 +286,7 @@ static int dump(int tbl_id)
 static int do_show(int argc, char **argv)
 {
 	int tbl_id;
-	char *name;
+	const char *name;
 
 	if (argc != 1) {
 		fprintf(stderr, "Wrong number of parameters\n");
@@ -328,7 +327,5 @@ static const struct cmd cmds[] = {
 
 int do_ad(int argc, char **argv)
 {
-	assert(!init_ppal_map(NULL));
-	assert(!ll_init_map(&rth));
 	return do_cmd(cmds, "Command", "xip ad help", argc, argv);
 }

@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <ppal_map.h>
 
 #include "xip_common.h"
 #include "SNAPSHOT.h"
@@ -15,7 +16,7 @@ static int usage(void)
 	fprintf(stderr,
 "Usage: xip [ OPTIONS ] OBJECT { COMMAND | help }\n"
 "       xip [ -force ] -batch filename\n"
-"where  OBJECT := { ad | dst | hid | xdp }\n"
+"where  OBJECT := { ad | dst | hid | serval | xdp }\n"
 "       OPTIONS := { -V[ersion] | -s[tatistics] | -d[etails] |\n"
 "                    -o[neline] | -t[imestamp] | -b[atch] [filename] }\n");
 	return -1;
@@ -30,12 +31,13 @@ static int do_help(int argc, char **argv)
 }
 
 static const struct cmd cmds[] = {
-	{ "ad", 	do_ad	},
-	{ "dst",	do_dst	},
-	{ "hid", 	do_hid	},
-	{ "xdp",	do_xdp	},
-	{ "help",       do_help	},
-	{ 0,		0 }
+	{ "ad", 	do_ad		},
+	{ "dst",	do_dst		},
+	{ "hid", 	do_hid		},
+	{ "serval",	do_serval	},
+	{ "xdp",	do_xdp		},
+	{ "help",       do_help		},
+	{ 0,		0		}
 };
 
 static inline int my_do_cmd(int argc, char **argv)
@@ -91,6 +93,8 @@ static int batch(const char *name)
 
 int main(int argc, char **argv)
 {
+	const char *ppal_map_file = NULL;
+
 	/* Take care of options. */
 	while (argc > 1) {
 		char *opt = argv[1];
@@ -124,6 +128,12 @@ int main(int argc, char **argv)
 			batch_file = argv[1];
 		} else if (matches(opt, "-help") == 0) {
 			return usage();
+		} else if (matches(opt, "-ppal-map") == 0) {
+			argc--;
+			argv++;
+			if (argc <= 1)
+				return usage();
+			ppal_map_file = argv[1];
 		} else {
 			fprintf(stderr, "Option \"%s\" is unknown, "
 				"try \"xip -help\".\n", opt);
@@ -133,6 +143,8 @@ int main(int argc, char **argv)
 	}
 
 	_SL_ = oneline ? "\\" : "\n" ;
+
+	assert(!init_ppal_map(ppal_map_file));
 
 	if (batch_file)
 		return batch(batch_file);

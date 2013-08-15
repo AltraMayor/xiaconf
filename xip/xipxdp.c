@@ -8,7 +8,6 @@
 #include "xip_common.h"
 #include "utils.h"
 #include "libnetlink.h"
-#include "ll_map.h"
 
 static int usage(void)
 {
@@ -340,7 +339,5 @@ static const struct cmd cmds[] = {
 
 int do_xdp(int argc, char **argv)
 {
-	assert(!init_ppal_map(NULL));
-	assert(!ll_init_map(&rth));
 	return do_cmd(cmds, "Command", "xip xdp help", argc, argv);
 }

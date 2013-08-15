@@ -1,0 +1,2 @@
+#!/bin/bash
+LD_LIBRARY_PATH=../libxia ./xip --ppal-map ../etc-test/xia/principals $@

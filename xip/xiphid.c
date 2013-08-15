@@ -665,7 +665,6 @@ static const struct cmd cmds[] = {
 
 int do_hid(int argc, char **argv)
 {
-	assert(!init_ppal_map(NULL));
 	assert(!ll_init_map(&rth));
 	return do_cmd(cmds, "Command", "xip hid help", argc, argv);
 }
