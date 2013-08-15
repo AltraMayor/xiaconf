@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <string.h>
 #include <assert.h>
 #include <net/xia_fib.h>
 #include <xia_socket.h>
@@ -6,6 +7,7 @@
 #include "xip_common.h"
 #include "utils.h"
 #include "libnetlink.h"
+#include "xiart.h"
 
 static int usage(void)
 {
@@ -169,6 +171,46 @@ static int do_showsockets(int argc, char **argv)
 	return dump(XRTABLE_LOCAL_INDEX, serval_type(argv[0]), print_socket);
 }
 
+static int do_addroute(int argc, char **argv)
+{
+	struct xia_xid dst, gw;
+
+	if (argc != 4) {
+		fprintf(stderr, "Wrong number of parameters\n");
+		return usage();
+	}
+	if (strcmp(argv[2], "gw")) {
+		fprintf(stderr, "Wrong parameters\n");
+		return usage();
+	}
+	xrt_get_ppalty_id(serval_type(argv[0]), usage, &dst, argv[1]);
+	xrt_get_xid(usage, &gw, argv[3]);
+
+	return xrt_modify_route(&dst, &gw);
+}
+
+static int do_delroute(int argc, char **argv)
+{
+	struct xia_xid dst;
+
+	if (argc != 2) {
+		fprintf(stderr, "Wrong number of parameters\n");
+		return usage();
+	}
+	xrt_get_ppalty_id(serval_type(argv[0]), usage, &dst, argv[1]);
+
+	return xrt_modify_route(&dst, NULL);
+}
+
+static int do_showroutes(int argc, char **argv)
+{
+	if (argc != 1) {
+		fprintf(stderr, "Wrong number of parameters\n");
+		return usage();
+	}
+	return xrt_list_rt_redirects(XRTABLE_MAIN_INDEX, serval_type(argv[0]));
+}
+
 static int do_help(int argc, char **argv)
 {
 	UNUSED(argc);
@@ -179,11 +221,9 @@ static int do_help(int argc, char **argv)
 
 static const struct cmd cmds[] = {
 	{ "showsockets",	do_showsockets	},
-/* TODO
 	{ "addroute",		do_addroute	},
 	{ "delroute",		do_delroute	},
 	{ "showroutes",		do_showroutes	},
-*/
 	{ "help",		do_help		},
 	{ 0,			0		}
 };

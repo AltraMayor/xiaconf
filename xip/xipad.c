@@ -1,13 +1,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
-#include <limits.h>
 #include <net/xia_fib.h>
 #include <xia_socket.h>
 
 #include "xip_common.h"
 #include "utils.h"
 #include "libnetlink.h"
+#include "xiart.h"
 
 static int usage(void)
 {
@@ -23,25 +23,6 @@ static int usage(void)
 "	XID := PRINCIPAL '-' ID\n"
 "	PRINCIPAL := '0x' NUMBER | STRING\n");
 	return -1;
-}
-
-static void get_ad(const char *s, struct xia_xid *dst)
-{
-	if (xia_ptoid(s, INT_MAX, dst) < 0) {
-		fprintf(stderr, "Invalid ID '%s'\n", s);
-		usage();
-		exit(1);
-	}
-	assert(!ppal_name_to_type("ad", &dst->xid_type));
-}
-
-static void get_xid(const char *s, struct xia_xid *dst)
-{
-	if (xia_ptoxid(s, INT_MAX, dst) < 0) {
-		fprintf(stderr, "Invalid XID '%s'\n", s);
-		usage();
-		exit(1);
-	}
 }
 
 static int modify_local(const struct xia_xid *dst, int to_add)
@@ -87,7 +68,7 @@ static int do_local(int argc, char **argv, int to_add)
 		fprintf(stderr, "Wrong number of parameters\n");
 		return usage();
 	}
-	get_ad(argv[0], &dst);
+	xrt_get_ppal_id("ad", usage, &dst, argv[0]);
 	return modify_local(&dst, to_add);
 }
 
@@ -99,47 +80,6 @@ static int do_addlocal(int argc, char **argv)
 static int do_dellocal(int argc, char **argv)
 {
 	return do_local(argc, argv, 0);
-}
-
-/* Based on iproute2/ip/iproute.c:iproute_modify. */
-static int modify_route(const struct xia_xid *dst, const struct xia_xid *gw)
-{
-	int to_add = !!gw;
-	struct {
-		struct nlmsghdr 	n;
-		struct rtmsg 		r;
-		char   			buf[1024];
-	} req;
-
-	memset(&req, 0, sizeof(req));
-
-	req.n.nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg));
-
-	if (to_add) {
-		/* XXX Does one really needs all these flags? */
-		req.n.nlmsg_flags = NLM_F_REQUEST|NLM_F_CREATE|NLM_F_EXCL;
-		req.n.nlmsg_type = RTM_NEWROUTE;
-		req.r.rtm_scope = RT_SCOPE_LINK;
-	} else {
-		req.n.nlmsg_flags = NLM_F_REQUEST;
-		req.n.nlmsg_type = RTM_DELROUTE;
-		req.r.rtm_scope = RT_SCOPE_NOWHERE;
-	}
-
-	req.r.rtm_family = AF_XIA;
-	req.r.rtm_table = XRTABLE_MAIN_INDEX;
-	req.r.rtm_protocol = RTPROT_BOOT;
-	req.r.rtm_type = RTN_UNICAST;
-
-	req.r.rtm_dst_len = sizeof(*dst);
-	addattr_l(&req.n, sizeof(req), RTA_DST, dst, sizeof(*dst));
-
-	if (to_add)
-		addattr_l(&req.n, sizeof(req), RTA_GATEWAY, gw, sizeof(*gw));
-
-	if (rtnl_talk(&rth, &req.n, 0, 0, NULL, NULL, NULL) < 0)
-		exit(2);
-	return 0;
 }
 
 static int do_addroute(int argc, char **argv)
@@ -154,10 +94,10 @@ static int do_addroute(int argc, char **argv)
 		fprintf(stderr, "Wrong parameters\n");
 		return usage();
 	}
-	get_ad(argv[0], &dst);
-	get_xid(argv[2], &gw);
+	xrt_get_ppal_id("ad", usage, &dst, argv[0]);
+	xrt_get_xid(usage, &gw, argv[2]);
 
-	return modify_route(&dst, &gw);
+	return xrt_modify_route(&dst, &gw);
 }
 
 static int do_delroute(int argc, char **argv)
@@ -168,9 +108,9 @@ static int do_delroute(int argc, char **argv)
 		fprintf(stderr, "Wrong number of parameters\n");
 		return usage();
 	}
-	get_ad(argv[0], &dst);
+	xrt_get_ppal_id("ad", usage, &dst, argv[0]);
 
-	return modify_route(&dst, NULL);
+	return xrt_modify_route(&dst, NULL);
 }
 
 static struct
@@ -285,7 +225,6 @@ static int dump(int tbl_id)
 
 static int do_show(int argc, char **argv)
 {
-	int tbl_id;
 	const char *name;
 
 	if (argc != 1) {
@@ -294,17 +233,17 @@ static int do_show(int argc, char **argv)
 	}
 
 	name = argv[0];
-	if (!matches(name, "locals"))
-		tbl_id = XRTABLE_LOCAL_INDEX;
-	else if (!matches(name, "routes"))
-		tbl_id = XRTABLE_MAIN_INDEX;
-	else {
+	if (!matches(name, "locals")) {
+		return dump(XRTABLE_LOCAL_INDEX);
+	} else if (!matches(name, "routes")) {
+		xid_type_t ty;
+		assert(!ppal_name_to_type("ad", &ty));
+		return xrt_list_rt_redirects(XRTABLE_MAIN_INDEX, ty);
+	} else {
 		fprintf(stderr, "Unknow routing table '%s', it must be either 'locals', or 'routes'\n",
 			name);
 		return usage();
 	}
-
-	return dump(tbl_id);
 }
 
 static int do_help(int argc, char **argv)

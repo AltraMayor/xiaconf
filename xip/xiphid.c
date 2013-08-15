@@ -25,6 +25,7 @@
 #include "ppk.h"
 #include "utils.h"
 #include "ll_map.h"
+#include "xiart.h"
 
 #ifndef HID_PATH
 #define HID_PATH "/etc/xia/hid/"
@@ -39,8 +40,6 @@ static int usage(void)
 "       xip hid { addneigh | delneigh } ID lladdr LLADDR dev DEV\n"
 "       xip hid showneighs\n"
 "where	ID := HEXDIGIT{20}\n"
-"       XID := PRINCIPAL '-' ID\n"
-"	PRINCIPAL := '0x' NUMBER | STRING\n"
 "	LLADDR := HEXDIGIT{1,2} (':' HEXDIGIT{1,2})*\n"
 "	DEV := STRING NUMBER\n");
 	return -1;
@@ -414,19 +413,6 @@ static int do_showaddrs(int argc, char **argv)
 	return showaddrs();
 }
 
-/* XXX This function, and xipad.c:get_ad should be reshaped, and
- * go to a library.
- */
-static void get_hid(const char *s, struct xia_xid *dst)
-{
-	if (xia_ptoid(s, INT_MAX, dst) < 0) {
-		fprintf(stderr, "Invalid ID '%s'\n", s);
-		usage();
-		exit(1);
-	}
-	assert(!ppal_name_to_type("hid", &dst->xid_type));
-}
-
 static int modify_neigh(struct xia_xid *dst, unsigned char *lladdr,
 	int lladdr_len, unsigned oif, int to_add)
 {
@@ -484,7 +470,7 @@ static int do_Xneigh_common(int argc, char **argv, int to_add)
 		fprintf(stderr, "Wrong parameters\n");
 		return usage();
 	}
-	get_hid(argv[0], &dst);
+	xrt_get_ppal_id("hid", usage, &dst, argv[0]);
 
 	str_lladdr = argv[2];
 	lladdr_len = lladdr_pton(str_lladdr, lladdr, sizeof(lladdr));
