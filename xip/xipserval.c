@@ -2,6 +2,7 @@
 #include <string.h>
 #include <assert.h>
 #include <net/xia_fib.h>
+#include <net/xia_serval.h>
 #include <xia_socket.h>
 
 #include "xip_common.h"
@@ -62,6 +63,25 @@ static int dump(__u32 tbl_id, xid_type_t ty, rtnl_filter_t print)
 		exit(1);
 	}
 	return 0;
+}
+
+static const char *state_to_str(int state)
+{
+	switch (state) {
+	case SAL_INIT:		return "INIT";
+	case SAL_CONNECTED:	return "CONNECTED";
+	case SAL_REQUEST:	return "REQUEST";
+	case SAL_RESPOND:	return "RESPOND";
+	case SAL_FINWAIT1:	return "FINWAIT1";
+	case SAL_FINWAIT2:	return "FINWAIT2";
+	case SAL_TIMEWAIT:	return "TIMEWAIT";
+	case SAL_CLOSED:	return "CLOSED";
+	case SAL_CLOSEWAIT:	return "CLOSEWAIT";
+	case SAL_LASTACK:	return "LASTACK";
+	case SAL_LISTEN:	return "LISTEN";
+	case SAL_CLOSING:	return "CLOSING";
+	default:		return "Unknown";
+	}
 }
 
 static int print_socket(const struct sockaddr_nl *who, struct nlmsghdr *n,
@@ -125,7 +145,6 @@ static int print_socket(const struct sockaddr_nl *who, struct nlmsghdr *n,
 			/* XXX It got to use @fp! */
 			print_xia_addr((const struct xia_addr *)
 				RTA_DATA(tb[RTA_SRC]));
-			fprintf(fp, "\n");
 			break;
 
 		case sizeof(struct xia_xid):
@@ -141,6 +160,10 @@ static int print_socket(const struct sockaddr_nl *who, struct nlmsghdr *n,
 			break;
 		}
 	}
+
+	if (tb[RTA_PROTOINFO])
+		fprintf(fp, "socket state = %s ",
+			state_to_str(*((__u8 *)RTA_DATA(tb[RTA_PROTOINFO]))));
 
 	assert(!r->rtm_src_len);
 	assert(!(r->rtm_flags & RTM_F_CLONED));
