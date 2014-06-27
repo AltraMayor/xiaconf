@@ -24,7 +24,8 @@ static void init_ppk(void)
 
 	if (RAND_load_file("/dev/random", 4) <= 0)
 		if (RAND_load_file("/dev/urandom", 128) <= 0) {
-			fprintf(stderr, "PPK library failed to inialize seed");
+			fprintf(stderr,
+				"PPK library failed to inialize seed\n");
 			exit(1);
 		}
 }
