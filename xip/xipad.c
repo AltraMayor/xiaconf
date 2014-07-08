@@ -240,7 +240,7 @@ static int do_show(int argc, char **argv)
 		assert(!ppal_name_to_type("ad", &ty));
 		return xrt_list_rt_redirects(XRTABLE_MAIN_INDEX, ty);
 	} else {
-		fprintf(stderr, "Unknow routing table '%s', it must be either 'locals', or 'routes'\n",
+		fprintf(stderr, "Unknown routing table '%s', it must be either 'locals', or 'routes'\n",
 			name);
 		return usage();
 	}

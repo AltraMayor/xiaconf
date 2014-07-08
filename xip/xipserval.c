@@ -31,7 +31,7 @@ static xid_type_t serval_type(const char *name)
 	else if (!matches(name, "flow"))
 		assert(!ppal_name_to_type("flowid", &ty));
 	else {
-		fprintf(stderr, "Unknow socket type '%s', it must be either 'service', or 'flow'\n",
+		fprintf(stderr, "Unknown socket type '%s', it must be either 'service', or 'flow'\n",
 			name);
 		return usage();
 	}
