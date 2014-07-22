@@ -65,6 +65,7 @@ static int do_local(int argc, char **argv, int to_add)
 {
 	struct xia_xid dst;
 	char static_xid[XIA_MAX_STRID_SIZE];
+	char *str_xid;
 
 	if (argc == 2) {
 		/* Need to convert an IP address and port to an XID. */
@@ -106,14 +107,15 @@ static int do_local(int argc, char **argv, int to_add)
 			fprintf(stderr, "do_local: snprintf failed");
 			return -ENOSPC;
 		}
+		str_xid = static_xid;
 	} else if (argc == 1) {
 		/* User has given an XID. */
-		memcpy(static_xid, argv[0], XIA_MAX_STRID_SIZE);
+		str_xid = argv[0];
 	} else {
 		fprintf(stderr, "Wrong number of parameters\n");
 		return usage();
 	}
-	xrt_get_ppal_id("u4id", usage, &dst, static_xid);
+	xrt_get_ppal_id("u4id", usage, &dst, str_xid);
 	return modify_local(&dst, to_add);
 }
 
