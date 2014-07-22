@@ -17,10 +17,10 @@
 static int usage(void)
 {
 	fprintf(stderr,
-"Usage:	xip u4id add ID\n"
-"	xip u4id del ID\n"
+"Usage:	xip u4id add UDP_ID\n"
+"	xip u4id del UDP_ID\n"
 "	xip u4id show\n"
-"where	ID := HEXDIGIT{20} | IPV4ADDR PORT\n"
+"where	UDP_ID := HEXDIGIT{20} | IPV4ADDR PORT\n"
 "	IPV4ADDR := 0-255 \".\" 0-255 \".\" 0-255 \".\" 0-255\n"
 "	PORT := 0-65535 | \"0x\" 0000-FFFF\n");
 	return -1;
