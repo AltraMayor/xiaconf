@@ -3,6 +3,7 @@
 #include <string.h>
 #include <limits.h>
 #include <net/xia_fib.h>
+#include <net/xia_u4id.h>
 #include <xia_socket.h>
 #include <asm-generic/errno-base.h>
 
@@ -17,7 +18,7 @@
 static int usage(void)
 {
 	fprintf(stderr,
-"Usage:	xip u4id add UDP_ID\n"
+"Usage:	xip u4id add UDP_ID [-tunnel [-disable_checksum]]\n"
 "	xip u4id del UDP_ID\n"
 "	xip u4id show\n"
 "where	UDP_ID := HEXDIGIT{20} | IPV4ADDR PORT\n"
@@ -26,7 +27,8 @@ static int usage(void)
 	return -1;
 }
 
-static int modify_local(const struct xia_xid *dst, int to_add)
+static int modify_local(const struct xia_xid *dst,
+	struct local_u4id_info *lu4id_info, int to_add)
 {
 	struct {
 		struct nlmsghdr 	n;
@@ -55,6 +57,9 @@ static int modify_local(const struct xia_xid *dst, int to_add)
 
 	req.r.rtm_dst_len = sizeof(*dst);
 	addattr_l(&req.n, sizeof(req), RTA_DST, dst, sizeof(*dst));
+	if (to_add)
+		addattr_l(&req.n, sizeof(req), RTA_PROTOINFO,
+			lu4id_info, sizeof(*lu4id_info));
 
 	if (rtnl_talk(&rth, &req.n, 0, 0, NULL, NULL, NULL) < 0)
 		exit(2);
@@ -66,7 +71,40 @@ static int do_local(int argc, char **argv, int to_add)
 	struct xia_xid dst;
 	char static_xid[XIA_MAX_STRID_SIZE];
 	char *str_xid;
+	struct local_u4id_info lu4id_info = {
+		.tunnel = false,
+		.checksum_disabled = false
+	};
+	int tunnel = 0;
+	int disable_checksum = 0;
 
+	if (!to_add)
+		goto parse_id;
+
+	while (argc > 1) {
+		char *opt = argv[argc - 1];
+		if (matches(opt, "-disable_checksum") == 0) {
+			disable_checksum++;
+			argc--;
+		} else if (matches(opt, "-tunnel") == 0) {
+			tunnel++;
+			argc--;
+		} else {
+			break;
+		}
+	}
+
+	if (tunnel > 1 || disable_checksum > 1 || disable_checksum > tunnel) {
+		fprintf(stderr, "Incorrect parameters\n");
+		return usage();
+	}
+
+	if (tunnel) {
+		lu4id_info.tunnel = true;
+		lu4id_info.checksum_disabled = disable_checksum;
+	}
+
+parse_id:
 	if (argc == 2) {
 		/* Need to convert an IP address and port to an XID. */
 		struct in_addr ip_addr;
@@ -116,7 +154,7 @@ static int do_local(int argc, char **argv, int to_add)
 		return usage();
 	}
 	xrt_get_ppal_id("u4id", usage, &dst, str_xid);
-	return modify_local(&dst, to_add);
+	return modify_local(&dst, &lu4id_info, to_add);
 }
 
 static int do_add(int argc, char **argv)
@@ -149,6 +187,7 @@ static int print_route(const struct sockaddr_nl *who, struct nlmsghdr *n,
 	int len = n->nlmsg_len;
 	struct rtattr *tb[RTA_MAX+1];
 	const struct xia_xid *dst;
+	const struct local_u4id_info *lu4id_info;
 	__u32 table;
 	char ip_addr_str[INET_ADDRSTRLEN];
 	__be32 *pxid;
@@ -204,6 +243,12 @@ static int print_route(const struct sockaddr_nl *who, struct nlmsghdr *n,
 	ip_port = __be16_to_cpu(*(__be16 *)pxid);
 	if (inet_ntop(AF_INET, &ip_addr, ip_addr_str, INET_ADDRSTRLEN))
 		fprintf(fp, " using IP socket: %s:%d\n",ip_addr_str, ip_port);
+
+	lu4id_info = RTA_DATA(tb[RTA_PROTOINFO]);
+	fprintf(fp, " tunnel socket: %s%s\n",
+		lu4id_info->tunnel ? "yes" : "no",
+		lu4id_info->tunnel ? (lu4id_info->checksum_disabled ?
+		" (checksumming disabled)" : " (checksumming enabled)") : "");
 
 	assert(!r->rtm_src_len);
 	assert(!(r->rtm_flags & RTM_F_CLONED));
