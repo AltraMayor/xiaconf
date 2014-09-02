@@ -6,6 +6,8 @@ extern struct rtnl_handle rth;
 
 /* From xipad.c */
 int do_ad(int argc, char **argv);
+/* From xipdst.c */
+int do_dst(int argc, char **argv);
 /* From xiphid.c */
 int do_hid(int argc, char **argv);
 /* From xipserval.c */
@@ -14,7 +16,7 @@ int do_serval(int argc, char **argv);
 int do_u4id(int argc, char **argv);
 /* From xipxdp.c */
 int do_xdp(int argc, char **argv);
-/* From xipdst.c */
-int do_dst(int argc, char **argv);
+/* From xipzf.c */
+int do_zf(int argc, char **argv);
 
 #endif /* HEADER_XIP_COMMON */
