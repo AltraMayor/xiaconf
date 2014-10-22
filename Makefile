@@ -16,7 +16,8 @@ install: libxia xip
 	install -o root -g root -m 644 $(LIBXIA_DIR)/libxia.so.0.0 /usr/lib
 	ldconfig
 	cp -r $(ETC_FILES)/xia /etc
-	mkdir -p /etc/xia/hid/{prv,tmp}
+	mkdir -p /etc/xia/hid/prv
+	mkdir /etc/xia/hid/tmp
 	chown root:root -R /etc/xia
 	chmod 700 -R /etc/xia
 	chmod 755 /etc/xia
