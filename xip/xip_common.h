@@ -10,6 +10,8 @@ int do_ad(int argc, char **argv);
 int do_dst(int argc, char **argv);
 /* From xiphid.c */
 int do_hid(int argc, char **argv);
+/* From xiplpm.c */
+int do_lpm(int argc, char **argv);
 /* From xipserval.c */
 int do_serval(int argc, char **argv);
 /* From xipu4id.c */
