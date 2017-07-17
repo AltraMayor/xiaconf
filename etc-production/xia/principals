@@ -18,3 +18,4 @@ serval		0x18	# Serval
 flowid		0x19	# Serval's flowID
 zf		0x20	# zFilter (multicast)
 lpm		0x21	# Longest Prefix Matching
+ether	0x22	# Ethernet
