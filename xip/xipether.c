@@ -26,6 +26,85 @@ static int usage(void)
 	return -1;
 }
 
+static int modify_local(const struct xia_xid *dst, int to_add)
+{
+	struct {
+		struct nlmsghdr 	n;
+		struct rtmsg 		r;
+		char   			buf[1024];
+	} req;
+
+	memset(&req, 0, sizeof(req));
+
+	req.n.nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg));
+
+	if (to_add) {
+		/* XXX Does one really needs all these flags? */
+		req.n.nlmsg_flags = NLM_F_REQUEST|NLM_F_CREATE|NLM_F_EXCL;
+		req.n.nlmsg_type = RTM_NEWROUTE;
+	} else {
+		req.n.nlmsg_flags = NLM_F_REQUEST;
+		req.n.nlmsg_type = RTM_DELROUTE;
+	}
+
+	req.r.rtm_family = AF_XIA;
+	req.r.rtm_table = XRTABLE_LOCAL_INDEX;
+	req.r.rtm_protocol = RTPROT_BOOT;
+	req.r.rtm_type = RTN_LOCAL;
+	req.r.rtm_scope = RT_SCOPE_HOST;
+
+	req.r.rtm_dst_len = sizeof(*dst);
+	addattr_l(&req.n, sizeof(req), RTA_DST, dst, sizeof(*dst));
+
+	if (rtnl_talk(&rth, &req.n, 0, 0, NULL, NULL, NULL) < 0)
+		exit(2);
+	return 0;
+}
+
+static int do_local(int argc, char **argv, int to_add)
+{
+	struct xia_xid dst;
+	const char *dev, *strid;
+	unsigned char lladdr[MAX_ADDR_LEN];
+	unsigned oif,addrlen;
+
+	if (argc != 2) {
+		fprintf(stderr, "Wrong number of parameters\n");
+		return usage();
+	}
+
+	if (strcmp(argv[0], "dev")) {
+		fprintf(stderr, "Wrong parameters\n");
+		return usage();
+	}
+
+	dev = argv[1];
+	oif = ll_name_to_index(dev);
+	if (!oif) {
+		fprintf(stderr, "Cannot find device '%s'\n", dev);
+		return -1;
+	}
+	addrlen = ll_index_to_addr(oif, lladdr, sizeof(lladdr));
+	if (!addrlen) {
+		fprintf(stderr, "Cannot find device address '%s'\n", dev);
+		return -1;
+	}
+	strid = form_ether_xid(oif,lladdr);
+
+	xrt_get_ppal_id("ether", usage, &dst, strid);
+	return modify_local(&dst, to_add);
+}
+
+static int do_addlocal(int argc, char **argv)
+{
+	return do_local(argc, argv, 1);
+}
+
+static int do_dellocal(int argc, char **argv)
+{
+	return do_local(argc, argv, 0);
+}
+
 static int do_help(int argc, char **argv)
 {
 	UNUSED(argc);
@@ -46,5 +125,6 @@ static const struct cmd cmds[] = {
 
 int do_ether(int argc, char **argv)
 {
+	assert(!ll_init_map(&rth));
 	return do_cmd(cmds, "Command", "xip ether help", argc, argv);
 }
