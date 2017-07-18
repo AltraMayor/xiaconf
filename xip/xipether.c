@@ -15,6 +15,8 @@
 #include "libnetlink.h"
 #include "xiart.h"
 
+#define IFINDEX_STR_SIZE 8
+
 static int usage(void)
 {
 	fprintf(stderr,
@@ -24,6 +26,14 @@ static int usage(void)
 "where	ID := HEXDIGIT{20}\n"
 "	DEV := STRING NUMBER\n");
 	return -1;
+}
+
+static void form_ether_xid(unsigned oif, unsigned char *lladdr, unsigned tlen, const char *id)
+{
+	memset(id, 0, sizeof(*id));
+	snprintf(id, tlen+1, "%08x%s", oif, lladdr);
+	id[sizeof(*id)]='\0';
+	id[tlen] = '0';
 }
 
 static int modify_local(const struct xia_xid *dst, int to_add)
@@ -64,7 +74,8 @@ static int modify_local(const struct xia_xid *dst, int to_add)
 static int do_local(int argc, char **argv, int to_add)
 {
 	struct xia_xid dst;
-	const char *dev, *strid;
+	const char *dev;
+	char strid[XIA_XID_MAX];
 	unsigned char lladdr[MAX_ADDR_LEN];
 	unsigned oif,addrlen;
 
@@ -86,10 +97,11 @@ static int do_local(int argc, char **argv, int to_add)
 	}
 	addrlen = ll_index_to_addr(oif, lladdr, sizeof(lladdr));
 	if (!addrlen) {
+		/* should add a check to see if addrlen also equal to 12?*/
 		fprintf(stderr, "Cannot find device address '%s'\n", dev);
 		return -1;
 	}
-	strid = form_ether_xid(oif,lladdr);
+	form_ether_xid(oif, lladdr, (IFINDEX_STR_SIZE + addrlen), strid);
 
 	xrt_get_ppal_id("ether", usage, &dst, strid);
 	return modify_local(&dst, to_add);
