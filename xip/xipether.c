@@ -16,6 +16,7 @@
 #include "xiart.h"
 
 #define IFINDEX_STR_SIZE 8
+#define XIA_LLADDR_LEN 12
 
 static int usage(void)
 {
@@ -34,6 +35,13 @@ static void form_ether_xid(unsigned oif, unsigned char *lladdr, unsigned tlen, c
 	snprintf(id, tlen+1, "%08x%s", oif, lladdr);
 	id[sizeof(*id)]='\0';
 	id[tlen] = '0';
+}
+
+static void get_neigh_addr_from_id(const char *id, unsigned char *lladdr, unsigned *alen)
+{
+	*alen = XIA_LLADDR_LEN * sizeof(char);
+	strncpy(lladdr, id + (IFINDEX_STR_SIZE * sizeof(char)), (*alen));
+	lladdr[alen] = '\0';
 }
 
 static int modify_local(const struct xia_xid *dst, int to_add)
@@ -117,6 +125,84 @@ static int do_dellocal(int argc, char **argv)
 	return do_local(argc, argv, 0);
 }
 
+static int modify_neigh(struct xia_xid *dst, unsigned char *lladdr,
+	int lladdr_len, unsigned oif, int to_add)
+{
+	struct {
+		struct nlmsghdr 	n;
+		struct rtmsg 		r;
+		char   			buf[1024];
+	} req;
+
+	memset(&req, 0, sizeof(req));
+
+	req.n.nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg));
+
+	if (to_add) {
+		/* XXX Does one really needs all these flags? */
+		req.n.nlmsg_flags = NLM_F_REQUEST|NLM_F_CREATE|NLM_F_EXCL;
+		req.n.nlmsg_type = RTM_NEWROUTE;
+		req.r.rtm_scope = RT_SCOPE_LINK;
+	} else {
+		req.n.nlmsg_flags = NLM_F_REQUEST;
+		req.n.nlmsg_type = RTM_DELROUTE;
+		req.r.rtm_scope = RT_SCOPE_NOWHERE;
+	}
+
+	req.r.rtm_family = AF_XIA;
+	req.r.rtm_table = XRTABLE_MAIN_INDEX;
+	req.r.rtm_protocol = RTPROT_BOOT;
+	req.r.rtm_type = RTN_UNICAST;
+
+	req.r.rtm_dst_len = sizeof(*dst);
+	addattr_l(&req.n, sizeof(req), RTA_DST, dst, sizeof(*dst));
+	addattr_l(&req.n, sizeof(req), RTA_LLADDR, lladdr, lladdr_len);
+	addattr32(&req.n, sizeof(req), RTA_OIF, oif);
+
+	if (rtnl_talk(&rth, &req.n, 0, 0, NULL, NULL, NULL) < 0)
+		exit(2);
+	return 0;
+}
+
+static int do_Xneigh_common(int argc, char **argv, int to_add)
+{
+	struct xia_xid dst;
+	unsigned char lladdr[MAX_ADDR_LEN];
+	int lladdr_len;
+	const char *dev;
+	unsigned oif;
+
+	if (argc != 3) {
+		fprintf(stderr, "Wrong number of parameters\n");
+		return usage();
+	}
+	if (strcmp(argv[1], "dev")) {
+		fprintf(stderr, "Wrong parameters\n");
+		return usage();
+	}
+	xrt_get_ppal_id("ether", usage, &dst, argv[0]);
+
+	dev = argv[2];
+	oif = ll_name_to_index(dev);
+	if (!oif) {
+		fprintf(stderr, "Cannot find device '%s'\n", dev);
+		return -1;
+	}
+	get_neigh_addr_from_id(argv[0],lladdr,lladdr_len);
+
+	return modify_neigh(&dst, lladdr, lladdr_len, oif, to_add);
+}
+
+static int do_addneigh(int argc, char **argv)
+{
+	return do_Xneigh_common(argc, argv, 1);
+}
+
+static int do_delneigh(int argc, char **argv)
+{
+	return do_Xneigh_common(argc, argv, 0);
+}
+
 static int do_help(int argc, char **argv)
 {
 	UNUSED(argc);
@@ -128,8 +214,8 @@ static int do_help(int argc, char **argv)
 static const struct cmd cmds[] = {
 	{ "addinterface",	do_addlocal	},
 	{ "delinterface",	do_dellocal	},
-	{ "addneigh",	do_addroute	},
-	{ "delneigh",	do_delroute	},
+	{ "addneigh",	do_addneigh	},
+	{ "delneigh",	do_delneigh	},
 	{ "show",	do_show		},
 	{ "help",	do_help		},
 	{ 0,		0		}
