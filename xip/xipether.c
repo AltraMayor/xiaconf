@@ -8,6 +8,7 @@
 #include <asm-generic/errno-base.h>
 #include <net/xia_fib.h>
 #include <xia_socket.h>
+#include <net/xia_ether.h>
 
 #include "xip_common.h"
 #include "utils.h"
@@ -382,7 +383,7 @@ static int print_neigh(const struct sockaddr_nl *who, struct nlmsghdr *n,
 	return 0;
 }
 
-static int show(rtnl_filter_t filter)
+static int showinfo(rtnl_filter_t filter)
 {
 	reset_filter();
 
