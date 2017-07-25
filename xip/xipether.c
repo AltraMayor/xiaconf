@@ -8,6 +8,7 @@
 #include <asm-generic/errno-base.h>
 #include <net/xia_fib.h>
 #include <xia_socket.h>
+#include <sys/socket.h>
 #include <net/xia_ether.h>
 
 #include "xip_common.h"
