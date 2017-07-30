@@ -19,6 +19,7 @@
 
 #define IFINDEX_STR_SIZE 8
 #define XIA_LLADDR_LEN 12
+#define APPEND_ZEROES 20
 
 static int usage(void)
 {
@@ -33,10 +34,16 @@ static int usage(void)
 
 static void form_ether_xid(unsigned oif, unsigned char *lladdr, unsigned tlen, const char *id)
 {
-	memset(id, 0, sizeof(*id));
-	snprintf(id, tlen+1, "%08x%s", oif, lladdr);
-	id[ sizeof(*id) ]='\0';
-	id[tlen] = '0';
+	char bytes[4];
+	unsigned append = APPEND_ZEROES;
+	bytes[0] = (oif >> 24) & 0xFF;
+	bytes[1] = (oif >> 16) & 0xFF;
+	bytes[2] = (oif >> 8) & 0xFF;
+	bytes[3] = oif & 0xFF;
+	snprintf(id, (tlen+1), "%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%0*x",(unsigned char)bytes[0],
+				(unsigned char)bytes[1],(unsigned char)bytes[2],
+				(unsigned char)bytes[3],lladdr[0],lladdr[1],
+				lladdr[2], lladdr[3],lladdr[4], lladdr[5], append);
 }
 
 static void get_neigh_addr_from_id(const char *id, unsigned char *lladdr, unsigned *alen)
@@ -111,7 +118,7 @@ static int do_local(int argc, char **argv, int to_add)
 		fprintf(stderr, "Cannot find device address '%s'\n", dev);
 		return -1;
 	}
-	form_ether_xid(oif, lladdr, (IFINDEX_STR_SIZE + addrlen), strid);
+	form_ether_xid(oif, lladdr, XIA_XID_MAX*2, strid);
 
 	xrt_get_ppal_id("ether", usage, &dst, strid);
 	return modify_local(&dst, to_add);
