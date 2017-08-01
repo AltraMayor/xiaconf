@@ -176,29 +176,39 @@ static int modify_neigh(struct xia_xid *dst, unsigned char *lladdr,
 static int do_Xneigh_common(int argc, char **argv, int to_add)
 {
 	struct xia_xid dst;
+	char *str_lladdr;
+	char strid[XIA_XID_MAX];
 	unsigned char lladdr[MAX_ADDR_LEN];
 	int lladdr_len;
 	const char *dev;
 	unsigned oif;
 
-	if (argc != 3) {
+	if (argc != 4) {
 		fprintf(stderr, "Wrong number of parameters\n");
 		return usage();
 	}
-	if (strcmp(argv[1], "dev")) {
+	if (strcmp(argv[2], "dev") || strcmp(argv[0], "lladdr")) {
 		fprintf(stderr, "Wrong parameters\n");
 		return usage();
 	}
-	xrt_get_ppal_id("ether", usage, &dst, argv[0]);
 
-	dev = argv[2];
+	str_lladdr = argv[1];
+	lladdr_len = lladdr_pton(str_lladdr, lladdr, sizeof(lladdr));
+	if (lladdr_len < 0) {
+		fprintf(stderr, "Invalid link layer address: '%s'\n",
+			str_lladdr);
+		return lladdr_len;
+	}
+
+	dev = argv[3];
 	oif = ll_name_to_index(dev);
 	if (!oif) {
 		fprintf(stderr, "Cannot find device '%s'\n", dev);
 		return -1;
 	}
-	get_neigh_addr_from_id(argv[0],lladdr,lladdr_len);
+	form_ether_xid(oif, lladdr, XIA_XID_MAX*2, strid);
 
+	xrt_get_ppal_id("ether", usage, &dst, strid);
 	return modify_neigh(&dst, lladdr, lladdr_len, oif, to_add);
 }
 
