@@ -46,13 +46,6 @@ static void form_ether_xid(unsigned oif, unsigned char *lladdr, unsigned tlen, c
 				lladdr[2], lladdr[3],lladdr[4], lladdr[5], append);
 }
 
-static void get_neigh_addr_from_id(const char *id, unsigned char *lladdr, unsigned *alen)
-{
-	*alen = XIA_LLADDR_LEN * sizeof(char);
-	strncpy(lladdr, id + (IFINDEX_STR_SIZE * sizeof(char)), (*alen));
-	lladdr[alen] = '\0';
-}
-
 static int modify_local(const struct xia_xid *dst, int to_add)
 {
 	struct {
