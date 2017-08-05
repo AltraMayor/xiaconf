@@ -32,7 +32,7 @@ static int usage(void)
 	return -1;
 }
 
-static void form_ether_xid(unsigned oif, unsigned char *lladdr, unsigned tlen, const char *id)
+static void form_ether_xid(unsigned oif, unsigned char *lladdr, unsigned tlen, char *id)
 {
 	char bytes[4];
 	unsigned append = APPEND_ZEROES;
@@ -40,10 +40,10 @@ static void form_ether_xid(unsigned oif, unsigned char *lladdr, unsigned tlen, c
 	bytes[1] = (oif >> 16) & 0xFF;
 	bytes[2] = (oif >> 8) & 0xFF;
 	bytes[3] = oif & 0xFF;
-	snprintf(id, (tlen+1), "%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%0*x",(unsigned char)bytes[0],
+	snprintf(id, (tlen+1), "%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%0*hu",(unsigned char)bytes[0],
 				(unsigned char)bytes[1],(unsigned char)bytes[2],
 				(unsigned char)bytes[3],lladdr[0],lladdr[1],
-				lladdr[2], lladdr[3],lladdr[4], lladdr[5], append);
+				lladdr[2], lladdr[3],lladdr[4], lladdr[5], append, 0);
 }
 
 static int modify_local(const struct xia_xid *dst, int to_add)
@@ -85,7 +85,7 @@ static int do_local(int argc, char **argv, int to_add)
 {
 	struct xia_xid dst;
 	const char *dev;
-	char strid[XIA_XID_MAX];
+	char strid[2*XIA_XID_MAX];
 	unsigned char lladdr[MAX_ADDR_LEN];
 	unsigned oif,addrlen;
 
@@ -170,7 +170,7 @@ static int do_Xneigh_common(int argc, char **argv, int to_add)
 {
 	struct xia_xid dst;
 	char *str_lladdr;
-	char strid[XIA_XID_MAX];
+	char strid[2*XIA_XID_MAX];
 	unsigned char lladdr[MAX_ADDR_LEN];
 	int lladdr_len;
 	const char *dev;
