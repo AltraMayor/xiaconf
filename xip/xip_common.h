@@ -20,5 +20,7 @@ int do_u4id(int argc, char **argv);
 int do_xdp(int argc, char **argv);
 /* From xipzf.c */
 int do_zf(int argc, char **argv);
+/* From xipether.c */
+int do_ether(int argc, char **argv);
 
 #endif /* HEADER_XIP_COMMON */
