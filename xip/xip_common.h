@@ -8,6 +8,8 @@ extern struct rtnl_handle rth;
 int do_ad(int argc, char **argv);
 /* From xipdst.c */
 int do_dst(int argc, char **argv);
+/* From xipether.c */
+int do_ether(int argc, char **argv);
 /* From xiphid.c */
 int do_hid(int argc, char **argv);
 /* From xiplpm.c */

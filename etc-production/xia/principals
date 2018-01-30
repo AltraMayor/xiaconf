@@ -16,5 +16,6 @@ u4id		0x16	# XIP over UDP
 xdp		0x17	# eXpressive Datagram Protocol
 serval		0x18	# Serval
 flowid		0x19	# Serval's flowID
+ether		0x1a	# Ethernet
 zf		0x20	# zFilter (multicast)
 lpm		0x21	# Longest Prefix Matching
