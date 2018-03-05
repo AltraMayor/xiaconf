@@ -35,7 +35,7 @@ static int form_ether_xid(unsigned int oif, unsigned char *lladdr,
 	int rc;
 
 	rc = snprintf(id, tlen,
-			"%08x%02x%02x%02x%02x%02x%02x%020x", __cpu_to_be32(oif),
+			"%08x%02x%02x%02x%02x%02x%02x%020x", oif,
 			lladdr[0], lladdr[1], lladdr[2], lladdr[3], lladdr[4],
 			lladdr[5], 0);
 	if(rc <= 0 || rc >= tlen)
