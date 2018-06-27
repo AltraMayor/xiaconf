@@ -18,6 +18,8 @@ int do_lpm(int argc, char **argv);
 int do_serval(int argc, char **argv);
 /* From xipu4id.c */
 int do_u4id(int argc, char **argv);
+/* From xipu6id.c */
+int do_u6id(int argc, char **argv);
 /* From xipxdp.c */
 int do_xdp(int argc, char **argv);
 /* From xipzf.c */
