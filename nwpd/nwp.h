@@ -25,28 +25,12 @@ struct nwp_announce {
         uint8_t *addr_begin;
 };
 
-extern bool announce_validate(struct nwp_announce *, int);
+#define NWP_ANNOUNCEMENT_GET_HID(ann, n) (ann)->addr_begin + ((n)*XIA_XID_MAX)
 
-inline void announce_set_ha(struct nwp_announce *, uint8_t *);
-inline void announce_set_ha(struct nwp_announce *packet, uint8_t *ha)
-{
-        assert(packet->haddr_len != 0);
-        memmove(packet->haddr, ha, packet->haddr_len);
-} 
-
-inline void announce_add_xid(struct nwp_announce *, uint8_t *);
-inline void announce_add_xid(struct nwp_announce *packet, uint8_t *xid)
-{
-        memmove(packet->addr_begin + ((packet->hid_count++) * XIA_XID_MAX),
-                xid, XIA_XID_MAX);
-}
-
-inline int announce_size(struct nwp_announce *packet);
-inline int announce_size(struct nwp_announce *packet)
-{
-        return sizeof(struct nwp_common_hdr) + 2*sizeof(uint8_t)
-                + packet->haddr_len + packet->hid_count * XIA_XID_MAX;
-}
+extern bool read_announce(char *, struct nwp_announce *, int);
+extern void announce_set_ha(struct nwp_announce *, uint8_t *);
+extern void announce_add_xid(struct nwp_announce *, uint8_t *);
+extern int announce_size(struct nwp_announce *packet);
 
 #define NWP_NEIGHBOUR_LIST 0x02
 
