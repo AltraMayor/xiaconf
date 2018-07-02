@@ -35,8 +35,7 @@ int rtnl_talk(const struct mnl_socket *nl_socket, struct nlmsghdr *n)
                         return 0;
                 }
 
-                if (nlh->nlmsg_seq != seq) {
-                        printf("getting next\n");
+                if (nlh->nlmsg_pid != 0 || nlh->nlmsg_seq != seq) {
                         nlh = mnl_nlmsg_next(nlh, &msglen);
                         continue;
                 }
@@ -58,7 +57,7 @@ int rtnl_send_wilddump_request(const struct mnl_socket *nl_socket,
 {
         char buf[MNL_SOCKET_BUFFER_SIZE];
         struct nlmsghdr *nlh = mnl_nlmsg_put_header(buf);
-        int rtrn;
+        int rtrn, msglen;
         uint32_t seq = time(NULL);
 
         {
@@ -74,22 +73,31 @@ int rtnl_send_wilddump_request(const struct mnl_socket *nl_socket,
                         return rtrn;
         }
 
-        nlh = mnl_nlmsg_put_header(buf);
-        if ((rtrn = mnl_socket_recvfrom(nl_socket, buf, sizeof(buf))) == -1)
-                return rtrn;
+        printf("Starting loop\n");
+        while(1)
+        {
+                nlh = mnl_nlmsg_put_header(buf);
+                if ((rtrn = mnl_socket_recvfrom(nl_socket, buf, sizeof(buf))) == -1)
+                        return rtrn;
+                msglen = sizeof(buf);
 
-        int msglen = sizeof(buf);
-        while (mnl_nlmsg_ok(nlh, msglen)) {
-                if (nlh->nlmsg_type == NLMSG_ERROR) {
-                        struct nlmsgerr *err = mnl_nlmsg_get_payload(nlh);
-                        errno = -err->error;
-                        perror("RTNETLINK");
-                        return -1;
+                while (mnl_nlmsg_ok(nlh, msglen)) {
+                        switch (nlh->nlmsg_type) {
+                        case NLMSG_ERROR:
+                        {
+                                struct nlmsgerr *err = mnl_nlmsg_get_payload(nlh);
+                                errno = -err->error;
+                                perror("RTNETLINK");
+                                return -1;
+                        }
+                        case NLMSG_DONE:
+                                return 0;
+                        default:
+                                callback(nlh, arg);
+                        }
+                        nlh = mnl_nlmsg_next(nlh, &msglen);
                 }
-                callback(nlh, arg);
-                nlh = mnl_nlmsg_next(nlh, &msglen);
         }
-
         return 0;
 }
 
