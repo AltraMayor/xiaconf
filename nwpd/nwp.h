@@ -39,22 +39,16 @@ struct nwp_neigh_list {
         uint8_t hid_count;
         uint8_t haddr_len;
 
-        uint8_t *addr_begin;
-        /* With Ether addresses, the format will be
-           ETH_XID_1 1 HA_1
-           ETH_XID_2 1 HA_2
-           ...
-           ETH_XID_(hid_count) 1 HA_(hid_count)
-        */
+        struct nwp_neighbor **addrs;
 };
 
 struct nwp_neighbor {
         char xid[XIA_XID_MAX];
         uint8_t num;
-        uint8_t *ha_begin;
+        uint8_t **haddrs;
 };
 
-extern bool neigh_list_validate(struct nwp_neigh_list *, int);
+extern bool read_neighbor_list(char *, struct nwp_neigh_list *, int);
 
 /* Monitoring packets */
 
