@@ -18,6 +18,7 @@
 #include <net/if.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
+#include <net/xia.h>
 
 #include "nwp.h"
 #include "rtnl.h"
@@ -26,7 +27,7 @@ struct mnl_socket *xia_nl_socket;
 int subs;
 
 struct sockaddr_ll broadcast_addr;
-int broadcast_socket;
+int eth_socket;
 
 uint8_t if_hwaddr[ETH_ALEN];
 
@@ -39,19 +40,48 @@ struct ctxt {
 };
 
 struct route {
-        char dst_xid[XIA_XID_MAX];
-        char gw_xid[XIA_XID_MAX];
+        uint8_t dst_xid[XIA_XID_MAX];
+        uint8_t gw_xid[XIA_XID_MAX];
 };
 
 struct routes {
         struct route **routes;
         int n;
+        int table;
+
+        struct xia_xid *dst;
+        struct xia_xid *gw;
+
+        xid_type_t dst_type;
+        xid_type_t gw_type;
 };
 
 struct ctxt *new_ctxt (char *dev) {
         struct ctxt *ctxt = malloc(sizeof(struct ctxt));
         ctxt->dev = dev;
         return ctxt;
+}
+
+void send_neigh_list(int socket, struct sockaddr_ll *addr, int haddr_len);
+
+struct routes *create_filter(int table_index)
+{
+        struct routes *routes = calloc(1, sizeof(struct routes));
+        if (!routes) {
+                perror("malloc");
+                exit(1);
+        }
+        routes->table = table_index;
+        return routes;
+}
+
+void free_filter(struct routes *routes)
+{
+        int i;
+        for (i = 0; i < routes->n; i++) {
+                free(routes->routes[i]);
+        }
+        free(routes);
 }
 
 void init_broadcast(int ifindex)
@@ -65,12 +95,13 @@ void init_broadcast(int ifindex)
                 broadcast_addr.sll_addr[i] = 0xFF;
         }
 
-        broadcast_socket = socket(AF_PACKET, SOCK_DGRAM, htons(ETH_P_NWP));
-        if (broadcast_socket == -1) {
+        eth_socket = socket(AF_PACKET, SOCK_DGRAM, htons(ETH_P_NWP));
+        if (eth_socket == -1) {
                 perror("socket");
                 exit(1);
         }
 }
+
 
 void modify_neighbour (struct xia_xid *dst, bool add)
 {
@@ -98,19 +129,19 @@ void modify_neighbour (struct xia_xid *dst, bool add)
 
         mnl_attr_put(nlh, RTA_DST, sizeof(struct xia_xid), dst);
 
-        if (rtnl_talk(xia_nl_socket, nlh, nlh->nlmsg_len) == -1) 
-                fprintf(stderr, "modify_neighbour: Couldn't modify neighbour entry\n");        
+        if (rtnl_talk(xia_nl_socket, nlh) == -1)
+                fprintf(stderr, "modify_neighbour: Couldn't modify neighbour entry\n");
 }
 
-/* src should be an AD XID, dst an Ether XID */
-void modify_route(struct xia_xid *src, struct xia_xid *dst)
+/* dst should be an AD XID, gw an Ether XID */
+void modify_route(const struct xia_xid *dst, const struct xia_xid *gw)
 {
         char buf[MNL_SOCKET_BUFFER_SIZE];
         struct nlmsghdr *nlh = mnl_nlmsg_put_header(buf);
         struct rtmsg *rtm = mnl_nlmsg_put_extra_header(nlh, sizeof (struct rtmsg));
 
         nlh->nlmsg_seq = time(NULL);
-        if (dst) {
+        if (gw) {
                 nlh->nlmsg_flags = NLM_F_REQUEST | NLM_F_CREATE | NLM_F_EXCL;
                 nlh->nlmsg_type = RTM_NEWROUTE;
                 rtm->rtm_scope = RT_SCOPE_LINK;
@@ -125,25 +156,101 @@ void modify_route(struct xia_xid *src, struct xia_xid *dst)
         rtm->rtm_protocol = RTPROT_BOOT;
         rtm->rtm_type = RTN_UNICAST;
         rtm->rtm_dst_len = sizeof(struct xia_xid);
-        
-        mnl_attr_put(nlh, RTA_DST, sizeof(struct xia_xid), dst);
-        if (dst)
-                mnl_attr_put(nlh, RTA_GATEWAY, sizeof(*dst), dst);
 
-        
-        if (mnl_socket_sendto(xia_nl_socket, nlh, nlh->nlmsg_len) < 0) {
-                perror("mnl_socket_sendto");
-        }
+        mnl_attr_put(nlh, RTA_DST, sizeof(struct xia_xid), dst);
+        if (gw)
+                mnl_attr_put(nlh, RTA_GATEWAY, sizeof(*gw), gw);
+
+        if (rtnl_talk(xia_nl_socket, nlh) == -1)
+                fprintf(stderr, "modify_route: Couldn't modify route entry\n");
 }
 
 /* Based on xip/xipad.c:print_route */
-void get_ad_ether_routes(struct nlmsghdr *n, void *arg)
+void filter_callback(struct nlmsghdr *n, void *arg)
 {
-        struct routes *routes = (struct route *)arg;
-        if (mnl_nlmsg_ok(n, n->nlmsg_len)) {
+        int len = n->nlmsg_len;
+        uint32_t table;
+        struct routes *routes = (struct routes *)arg;
+        const struct xia_xid *dst = NULL, *gw = NULL;
+        struct rtattr *tb[RTA_MAX+1];
+        struct rtmsg *r = mnl_nlmsg_get_payload(n);
+
+        if (!mnl_nlmsg_ok(n, n->nlmsg_len)) {
                 fprintf(stderr, "Received an invalid/truncated message\n");
                 return;
         }
+
+        /* mnl_nlmsg_fprintf(stdout, n, n->nlmsg_len, mnl_nlmsg_get_payload_len(n)); */
+
+        if (n->nlmsg_type != RTM_NEWROUTE) {
+                fprintf(stderr, "Not a route: %08x %08x %08x\n",
+			n->nlmsg_len, n->nlmsg_type, n->nlmsg_flags);
+                return;
+        }
+        if (n->nlmsg_type == RTM_DELROUTE)
+                return;
+        if (r->rtm_family != AF_XIA) {
+                return;
+        }
+
+        len -= NLMSG_LENGTH(sizeof(*r));
+        if (len < 0) {
+                fprintf(stderr, "BUG: wrong nlmsg len %d\n", len);
+		return;
+        }
+        if (r->rtm_dst_len != sizeof(struct xia_xid)) {
+		fprintf(stderr, "BUG: wrong rtm_dst_len %d\n", r->rtm_dst_len);
+		return;
+	}
+
+        parse_rtattr(tb, RTA_MAX, RTM_RTA(r), len);
+        table = rtnl_get_table(r, tb);
+        if (table != routes->table) {
+                return;
+        }
+
+        if (!tb[RTA_DST] ||
+            RTA_PAYLOAD(tb[RTA_DST]) != sizeof(struct xia_xid) ||
+            r->rtm_dst_len != sizeof(struct xia_xid)) {
+                return;
+        }
+
+        dst = (const struct xia_xid *)RTA_DATA(tb[RTA_DST]);
+
+        if (dst->xid_type != routes->dst_type)
+                return;
+        if (routes->dst && !are_sxids_equal(routes->dst, dst))
+                return;
+        if (n->nlmsg_type == RTM_DELROUTE)
+                return;
+
+        if (tb[RTA_GATEWAY]) {
+                assert(RTA_PAYLOAD(tb[RTA_GATEWAY]) == sizeof(struct xia_xid));
+                gw = (const struct xia_xid *)RTA_DATA(tb[RTA_GATEWAY]);
+                if (gw->xid_type != routes->gw_type)
+                        return;
+                if (routes->gw && !are_sxids_equal(gw, routes->gw)) {
+                        return;
+                }
+        }
+
+        assert(!r->rtm_src_len);
+	assert(!(r->rtm_flags & RTM_F_CLONED));
+
+        int index = routes->n;
+        if (index == 0)
+                routes->routes = malloc(sizeof(struct route *) * ++(routes->n));
+        else
+                routes->routes = realloc(routes->routes, ++routes->n * sizeof(struct route *));
+
+        routes->routes[index] = malloc(sizeof(struct route *));
+        if (!routes->routes) {
+                perror("malloc");
+                exit(1);
+        }
+        if (gw)
+                memcpy(routes->routes[index]->gw_xid, gw->xid_id, XIA_XID_MAX);
+        memcpy(routes->routes[index]->dst_xid, dst->xid_id, XIA_XID_MAX);
 }
 
 static int form_ether_xid(unsigned int oif, unsigned char *lladdr,
@@ -160,45 +267,184 @@ static int form_ether_xid(unsigned int oif, unsigned char *lladdr,
 	return 0;
 }
 
-void announce()
+void send_announce(int socket, struct sockaddr_ll *addr)
 {
-        char nwp_write_buf[1500];
-        struct xia_xid if_xid;
+        /*routes contains all local ADs*/
+        struct routes *routes = create_filter(XRTABLE_LOCAL_INDEX);
+        assert(!ppal_name_to_type("ad", &routes->dst_type));
+        assert(!ppal_name_to_type("ether", &routes->gw_type));
+
+        int i, size, member_size;
+        char *buf, *cur_buf;
+
         char strid[XIA_MAX_STRID_SIZE];
 
-        struct nwp_announce *ann = (struct nwp_announce *)&nwp_write_buf[0];
-        ann->common.type = NWP_ANNOUNCEMENT;
-        ann->common.version = 0x01;
-        ann->haddr_len = ETH_ALEN;
-        
-        ann->haddr = (uint8_t *)(&ann->haddr_len + sizeof(uint8_t));
-        ann->addr_begin = (uint8_t *)(ann->haddr + ann->haddr_len);
-
-        if (form_ether_xid(broadcast_addr.sll_ifindex, if_hwaddr, sizeof(strid),
+        if (form_ether_xid(addr->sll_ifindex, if_hwaddr, sizeof(strid),
                            strid) == -1) {
                 fprintf(stderr, "Cannot form ether XID\n");
                 exit(1);
         }
 
-        assert(!ppal_name_to_type("ad", &(if_xid.xid_type)));
-        assert(xia_ptoid(strid, INT_MAX, &if_xid) > 0);
-        announce_set_ha(ann, if_hwaddr);
-        announce_add_xid(ann, if_xid.xid_id);
-
-        int size = announce_size(ann);
-        printf("announce size: %d\n", size);
-        if (sendto(broadcast_socket, ann, size, 0,
-                   (struct sockaddr *)&broadcast_addr, sizeof(broadcast_addr)) == -1) {
-                perror("sendto");
+        if (rtnl_send_wilddump_request(xia_nl_socket, AF_XIA, RTM_GETROUTE,
+                                       filter_callback, routes) == -1) {
+                perror("rtnl_send_wilddump_request");
                 exit(1);
         }
+
+        struct nwp_announce ann;
+        ann.common.type = NWP_ANNOUNCEMENT;
+        ann.common.version = 0x01;
+        ann.hid_count = routes->n;
+        ann.haddr_len = ETH_ALEN;
+
+        size = announce_size(&ann);
+
+        buf = cur_buf = calloc(size, sizeof(char));
+        member_size = sizeof(struct nwp_common_hdr) + 2*sizeof(uint8_t);
+        memcpy(cur_buf, &ann, member_size);
+        cur_buf += member_size;
+        memcpy(cur_buf, if_hwaddr, ann.haddr_len);
+        cur_buf += ann.haddr_len;
+
+        for (i = 0; i < routes->n; i++) {
+                memcpy(cur_buf, routes->routes[i]->dst_xid, XIA_XID_MAX);
+                cur_buf += XIA_XID_MAX;
+        }
+
+        if (sendto(socket, buf, size, 0, (struct sockaddr *)addr,
+                   sizeof(*addr)) == -1) {
+                perror("sendto");
+                return;
+        }
+        free(buf);
+        free_filter(routes);
+}
+
+void *announce_loop(void *_arg)
+{
+        while(1) {
+                send_announce(eth_socket, &broadcast_addr);
+                sleep(5);
+        }
+}
+
+void process_announce(struct sockaddr_ll *addr, struct nwp_announce *announce)
+{
+        char if_ether_xid_str[XIA_MAX_STRID_SIZE];
+        int i;
+
+        if (announce->hid_count > 1) {
+                fprintf(stderr, "packet has more than one HID, discarding\n");
+                return;
+        }
+        if (announce->haddr_len != addr->sll_halen) {
+                fprintf(stderr, "hardware address length is different in the packet and the sender's sockaddr_ll value, discarding\n");
+                return;
+        }
+        if (memcmp(announce->haddr, if_hwaddr, announce->haddr_len) == 0) {
+                fprintf(stderr, "packet has a duplicate hardware address, discarding\n");
+                return;
+        }
+
+        struct xia_xid ether_xid;
+        if (form_ether_xid(addr->sll_ifindex, addr->sll_addr,
+                           sizeof(if_ether_xid_str), if_ether_xid_str)) {
+                fprintf(stderr, "Could not form ether XID for the address\n");
+                return;
+        }
+        assert(!ppal_name_to_type("ether", &ether_xid.xid_type));
+        if (xia_ptoid(if_ether_xid_str, INT_MAX, &ether_xid) == -1) {
+                fprintf(stderr, "Invalid ether XID: %s", if_ether_xid_str);
+                return;
+        }
+        printf("Adding neighbour ether-%s\n",if_ether_xid_str);
+        modify_neighbour(&ether_xid, true);
+
+        for (i = 0; i < announce->hid_count; i++) {
+                struct xia_xid ad_src;
+                assert(!ppal_name_to_type("ad", &(ad_src.xid_type)));
+                uint8_t *xid = NWP_ANNOUNCEMENT_GET_HID(announce, i);
+                memcpy(ad_src.xid_id, xid, XIA_XID_MAX);
+
+                printf("Adding route ");
+                print_xia_xid(&ad_src);
+                printf(" -> ");
+                print_xia_xid(&ether_xid);
+                printf("\n");
+                modify_route(&ad_src, &ether_xid);
+        }
+
+        send_neigh_list(eth_socket, addr, announce->haddr_len);
+}
+
+void send_neigh_list(int socket, struct sockaddr_ll *addr, int haddr_len)
+{
+        struct nwp_neigh_list list;
+        /* neighs contains all known neighbors */
+        struct routes *neighs = create_filter(XRTABLE_MAIN_INDEX);
+        assert(!ppal_name_to_type("ether", &neighs->dst_type));
+
+        int i, member_size = sizeof(struct nwp_common_hdr) + 2 * sizeof(uint8_t),
+                neigh_size = XIA_XID_MAX + sizeof(uint8_t) + haddr_len,
+                size = member_size + neighs->n * neigh_size;
+        char *buf, *cur_buf;
+        buf = cur_buf = calloc(1, size);
+
+        if (rtnl_send_wilddump_request(xia_nl_socket, AF_XIA, RTM_GETROUTE,
+                                       filter_callback, neighs) == -1) {
+                perror("rtnl_send_wilddump_request");
+                goto done;
+        }
+
+        list.common.type = NWP_NEIGHBOUR_LIST;
+        list.common.version = 0x01;
+        list.hid_count = neighs->n;
+        list.haddr_len = haddr_len;
+
+        memcpy(cur_buf, &list, member_size);
+        cur_buf += member_size;
+
+        uint8_t num_xids = 1;
+        for (i = 0; i < neighs->n; i++) {
+                /* routes contains all ad->ether routes*/
+                struct routes *routes = create_filter(XRTABLE_MAIN_INDEX);
+                assert(!ppal_name_to_type("ad", &routes->dst_type));
+                assert(!ppal_name_to_type("ether", &routes->gw_type));
+
+                struct xia_xid eth_xid ;
+                eth_xid.xid_type = routes->gw_type;
+                memcpy(eth_xid.xid_id, neighs->routes[i]->gw_xid, XIA_XID_MAX);
+                routes->gw = &eth_xid;
+                if (rtnl_send_wilddump_request(xia_nl_socket, AF_XIA, RTM_GETROUTE,
+                                       filter_callback, routes) == -1) {
+                        perror("rtnl_send_wilddump_request");
+                        free_filter(routes);
+                        goto done;
+                }
+
+                memcpy(cur_buf, neighs->routes[i]->dst_xid, XIA_XID_MAX);
+                cur_buf += XIA_XID_MAX;
+                memcpy(cur_buf, &num_xids, sizeof(uint8_t));
+                cur_buf += sizeof(uint8_t);
+                memcpy(cur_buf, &neighs->routes[i]->gw_xid[4], XIA_XID_MAX);
+                cur_buf += XIA_XID_MAX;
+                free_filter(routes);
+        }
+
+        if (sendto(socket, buf, size, 0, (struct sockaddr *)addr,
+                   sizeof(*addr)) == -1) {
+                perror("sendto");
+        }
+done:
+        free_filter(neighs);
+        return;
 }
 
 void *ether_receiver(void *ptr)
 {
         struct ctxt *ctxt = (struct ctxt *)ptr;
 
-        char *nwp_buf[1500];
+        char nwp_buf[1500];
         struct nwp_common_hdr *nwp_common = (struct nwp_common_hdr *)nwp_buf;
 
         char if_xid[XIA_MAX_STRID_SIZE];
@@ -240,7 +486,8 @@ void *ether_receiver(void *ptr)
                 exit(1);
         }
 
-        announce();
+        pthread_t announce_loop_thread;
+        pthread_create(&announce_loop_thread, NULL, announce_loop, ctxt);
         ctxt->fd = sock;
         printf("Listening on ether-%s\n", if_xid);
         while(1) {
@@ -260,47 +507,25 @@ void *ether_receiver(void *ptr)
                 switch (nwp_common->type) {
                 case NWP_ANNOUNCEMENT:
                 {
-                        char if_ether_xid[XIA_MAX_STRID_SIZE];
-                        struct nwp_announce *announce = (struct nwp_announce *)nwp_buf;
-                        printf("Received an announcement packet\n");
-                        if (!announce_validate(announce, msglen)) {
-                                printf("invalid NWP announce packet, discarding\n");
-                                continue;
-                        }
-                        printf("GOOD packet HID count: %d, Haddr len: %d\n",
-                               announce->hid_count,
-                               announce->haddr_len);
-
-                        if (announce->hid_count != 1) {
-                                printf("announce packet has more than one HID, discarding packet\n");
+                        struct nwp_announce *announce = malloc(msglen);
+                        if (!read_announce(nwp_buf, announce, msglen)) {
+                                fprintf(stderr, "invalid NWP announce packet, discarding\n");
+                                free(announce);
                                 continue;
                         }
 
-                        struct xia_xid xid;
-                        printf("forming XID\n");
-                        if (form_ether_xid(addr.sll_ifindex, addr.sll_addr,
-                                           sizeof(if_ether_xid), if_ether_xid)) {
-                                printf("Could not form ether XID for the address\n");
-                                continue;
-                        }
-                        assert(!ppal_name_to_type("ether", &xid.xid_type));
-                        printf("no issue here\n");
-                        if (xia_ptoid(if_ether_xid, INT_MAX, &xid) == -1) {
-                                printf("Invalid ether XID: %s", if_ether_xid);
-                                continue;
-                        }
-                        printf("Adding neighbour ether-%s\n",if_ether_xid);
-                        modify_neighbour(&xid, true);
+                        process_announce(&addr, announce);
+                        free(announce->haddr);
+                        free(announce->addr_begin);
+                        free(announce);
                         break;
                 }
                 case NWP_NEIGHBOUR_LIST:
                 {
-                        struct nwp_neigh_list *neigh = (struct nwp_neigh_list *)nwp_buf;
-                        neigh->addr_begin = (uint8_t *)neigh
-                                + offsetof(struct nwp_neigh_list, addr_begin);
-                        printf("Received a neighbour list packet\n");
-                        if (!neigh_list_validate(neigh, msglen)) {
-                                printf("invalid NWP neighbour list packet, discarding\n");
+                        struct nwp_neigh_list *neigh = malloc(msglen);
+                        if (!read_neighbor_list(nwp_buf, neigh, msglen)) {
+                                fprintf(stderr, "invalid NWP neighbour list packet, discarding\n");
+                                free(neigh);
                                 continue;
                         }
                         printf("GOOD packet HID count: %d, Haddr len: %d\n",
