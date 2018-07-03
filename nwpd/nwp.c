@@ -31,7 +31,7 @@ void announce_set_ha(struct nwp_announce *packet, uint8_t *ha)
 {
         assert(packet->haddr_len != 0);
         memmove(packet->haddr, ha, packet->haddr_len);
-} 
+}
 
 void announce_add_xid(struct nwp_announce *packet, uint8_t *xid)
 {
@@ -45,38 +45,41 @@ int announce_size(struct nwp_announce *packet)
                 + packet->haddr_len + packet->hid_count * XIA_XID_MAX;
 }
 
-bool neigh_list_validate(struct nwp_neigh_list *packet, int msglen)
+bool read_neighbor_list(char *buf, struct nwp_neigh_list *packet, int msglen)
 {
-        size_t size = sizeof(struct nwp_common_hdr)
+        size_t elem_len = sizeof(struct nwp_common_hdr)
                 + sizeof(uint8_t)
                 + sizeof(uint8_t);
-        packet->addr_begin = (uint8_t *)packet + offsetof(struct nwp_neigh_list, addr_begin);
-        int i;
-        uint8_t *addr = packet->addr_begin + 1;
+        int i, i2;
+        char *addr = buf + elem_len;
 
+        if (elem_len > msglen)
+                return false;
+        packet->addrs = malloc(sizeof(struct nwp_neighbor *) * packet->hid_count);
+
+        memcpy(packet, buf, elem_len);
         for (i = 0; i < packet->hid_count; i++) {
-                if (msglen < ((char *)addr - (char *)packet + 1))
+                struct nwp_neighbor *neigh = malloc(sizeof(struct nwp_neighbor));
+                size_t neigh_init_size = XIA_XID_MAX + sizeof(uint8_t);
+                if ((addr + neigh_init_size) - buf > msglen) {
+                        /* TODO: free memory */
                         return false;
-                size += XIA_XID_MAX + sizeof(uint8_t);
-                uint8_t num_ha = (uint8_t)*addr++;
-                size += packet->haddr_len * num_ha;
-                addr += packet->haddr_len * num_ha;
-        }
-        return size <= msglen;
-}
+                }
+                memcpy(neigh, addr, neigh_init_size);
+                if ((addr + neigh->num * packet->haddr_len) - buf > msglen) {
+                        /* TODO: free memory */
+                        return false;
+                }
 
-void neigh_list_add_neigh(struct nwp_neigh_list *packet, char *xid,
-                          uint8_t ha_num, char **ha)
-{
-        struct nwp_neighbor *neigh = (struct nwp_neighbor *)packet->addr_begin;
-        uint8_t i;
-        size_t ha_size = neigh->num * packet->haddr_len;
-
-        for (i = 0; packet->hid_count; i++) {
-                neigh += (XIA_XID_MAX + sizeof(uint8_t) + ha_size);
+                addr += neigh_init_size;
+                neigh->haddrs = malloc(sizeof(uint8_t *) * neigh->num);
+                for (i2 = 0; i2 < neigh->num; i2++) {
+                        neigh->haddrs[i2] = malloc(packet->haddr_len);
+                        memcpy(neigh->haddrs[i2], addr, packet->haddr_len);
+                        addr += packet->haddr_len;
+                }
+                packet->addrs[i] = neigh;
         }
 
-        memmove(neigh->xid, xid, XIA_XID_MAX);
-        neigh->num = ha_num;
-        memmove(neigh->ha_begin, ha, ha_size);
+        return true;
 }
