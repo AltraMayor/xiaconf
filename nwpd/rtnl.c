@@ -73,7 +73,6 @@ int rtnl_send_wilddump_request(const struct mnl_socket *nl_socket,
                         return rtrn;
         }
 
-        printf("Starting loop\n");
         while(1)
         {
                 nlh = mnl_nlmsg_put_header(buf);
