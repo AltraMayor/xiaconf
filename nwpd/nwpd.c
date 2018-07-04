@@ -181,8 +181,6 @@ void filter_callback(struct nlmsghdr *n, void *arg)
                 return;
         }
 
-        /* mnl_nlmsg_fprintf(stdout, n, n->nlmsg_len, mnl_nlmsg_get_payload_len(n)); */
-
         if (n->nlmsg_type != RTM_NEWROUTE) {
                 fprintf(stderr, "Not a route: %08x %08x %08x\n",
 			n->nlmsg_len, n->nlmsg_type, n->nlmsg_flags);
@@ -498,7 +496,6 @@ void *ether_receiver(void *ptr)
         ctxt->fd = sock;
         printf("Listening on ether-%s\n", if_xid);
         while(1) {
-                printf("Reading\n");
                 struct sockaddr_ll addr;
                 socklen_t addr_len = sizeof(struct sockaddr_ll);
                 int msglen;
