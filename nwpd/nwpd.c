@@ -386,16 +386,18 @@ void send_neigh_list(int socket, struct sockaddr_ll *addr, int haddr_len)
         assert(!ppal_name_to_type("ether", &neighs->dst_type));
 
         int i, member_size = sizeof(struct nwp_common_hdr) + 2 * sizeof(uint8_t),
-                neigh_size = XIA_XID_MAX + sizeof(uint8_t) + haddr_len,
-                size = member_size + neighs->n * neigh_size;
+                neigh_size = XIA_XID_MAX + sizeof(uint8_t) + haddr_len, size;
         char *buf, *cur_buf;
-        buf = cur_buf = calloc(1, size);
 
         if (rtnl_send_wilddump_request(xia_nl_socket, AF_XIA, RTM_GETROUTE,
                                        filter_callback, neighs) == -1) {
                 perror("rtnl_send_wilddump_request");
-                goto done;
+                free(neighs);
+                return;
         }
+
+        size = member_size + neighs->n * neigh_size;
+        buf = cur_buf = calloc(1, size);
 
         list.common.type = NWP_NEIGHBOUR_LIST;
         list.common.version = 0x01;
@@ -414,7 +416,7 @@ void send_neigh_list(int socket, struct sockaddr_ll *addr, int haddr_len)
 
                 struct xia_xid eth_xid ;
                 eth_xid.xid_type = routes->gw_type;
-                memcpy(eth_xid.xid_id, neighs->routes[i]->gw_xid, XIA_XID_MAX);
+                memcpy(eth_xid.xid_id, neighs->routes[i]->dst_xid, XIA_XID_MAX);
                 routes->gw = &eth_xid;
                 if (rtnl_send_wilddump_request(xia_nl_socket, AF_XIA, RTM_GETROUTE,
                                        filter_callback, routes) == -1) {
@@ -422,13 +424,14 @@ void send_neigh_list(int socket, struct sockaddr_ll *addr, int haddr_len)
                         free_filter(routes);
                         goto done;
                 }
-
-                memcpy(cur_buf, neighs->routes[i]->dst_xid, XIA_XID_MAX);
-                cur_buf += XIA_XID_MAX;
-                memcpy(cur_buf, &num_xids, sizeof(uint8_t));
-                cur_buf += sizeof(uint8_t);
-                memcpy(cur_buf, &neighs->routes[i]->gw_xid[4], XIA_XID_MAX);
-                cur_buf += XIA_XID_MAX;
+                if (routes->n > 0) {
+                        memcpy(cur_buf, routes->routes[i]->dst_xid, XIA_XID_MAX);
+                        cur_buf += XIA_XID_MAX;
+                        memcpy(cur_buf, &num_xids, sizeof(uint8_t));
+                        cur_buf += sizeof(uint8_t);
+                        memcpy(cur_buf, &neighs->routes[i]->dst_xid[4], ETH_ALEN);
+                        cur_buf += ETH_ALEN;
+                }
                 free_filter(routes);
         }
 
@@ -436,7 +439,10 @@ void send_neigh_list(int socket, struct sockaddr_ll *addr, int haddr_len)
                    sizeof(*addr)) == -1) {
                 perror("sendto");
         }
+
+
 done:
+        free(buf);
         free_filter(neighs);
         return;
 }
@@ -508,7 +514,7 @@ void *ether_receiver(void *ptr)
                 switch (nwp_common->type) {
                 case NWP_ANNOUNCEMENT:
                 {
-                        struct nwp_announce *announce = malloc(msglen);
+                        struct nwp_announce *announce = calloc(1, sizeof(struct nwp_announce));
                         if (!read_announce(nwp_buf, announce, msglen)) {
                                 fprintf(stderr, "invalid NWP announce packet, discarding\n");
                                 free(announce);
