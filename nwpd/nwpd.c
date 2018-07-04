@@ -230,21 +230,21 @@ void filter_callback(struct nlmsghdr *n, void *arg)
                 gw = (const struct xia_xid *)RTA_DATA(tb[RTA_GATEWAY]);
                 if (gw->xid_type != routes->gw_type)
                         return;
-                if (routes->gw && !are_sxids_equal(gw, routes->gw)) {
+                if (routes->gw && !are_sxids_equal(gw, routes->gw))
                         return;
-                }
+
         }
 
         assert(!r->rtm_src_len);
 	assert(!(r->rtm_flags & RTM_F_CLONED));
 
-        int index = routes->n;
+        int index = routes->n++;
         if (index == 0)
-                routes->routes = malloc(sizeof(struct route *) * ++(routes->n));
+                routes->routes = calloc(routes->n, sizeof(struct route *));
         else
-                routes->routes = realloc(routes->routes, ++routes->n * sizeof(struct route *));
+                routes->routes = realloc(routes->routes, routes->n * sizeof(struct route *));
 
-        routes->routes[index] = malloc(sizeof(struct route *));
+        routes->routes[index] = calloc(1, sizeof(struct route));
         if (!routes->routes) {
                 perror("malloc");
                 exit(1);
