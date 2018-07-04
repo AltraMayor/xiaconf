@@ -81,6 +81,7 @@ void free_filter(struct routes *routes)
         for (i = 0; i < routes->n; i++) {
                 free(routes->routes[i]);
         }
+        free(routes->routes);
         free(routes);
 }
 
