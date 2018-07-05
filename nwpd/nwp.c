@@ -50,28 +50,35 @@ int announce_size(struct nwp_announce *packet)
                 + packet->haddr_len + packet->hid_count * XIA_XID_MAX;
 }
 
+void announce_free(struct nwp_announce *packet)
+{
+        free(packet->haddr);
+        free(packet->addr_begin);
+        free(packet);
+}
+
 bool read_neighbor_list(char *buf, struct nwp_neigh_list *packet, int msglen)
 {
         size_t elem_len = sizeof(struct nwp_common_hdr)
                 + sizeof(uint8_t)
                 + sizeof(uint8_t);
         int i, i2;
-        char *addr = buf + elem_len;
+        char *buf_start = buf, *addr = buf + elem_len;
 
+        memcpy(packet, buf, elem_len);
         if (elem_len > msglen)
                 return false;
         packet->addrs = malloc(sizeof(struct nwp_neighbor *) * packet->hid_count);
 
-        memcpy(packet, buf, elem_len);
         for (i = 0; i < packet->hid_count; i++) {
                 struct nwp_neighbor *neigh = malloc(sizeof(struct nwp_neighbor));
                 size_t neigh_init_size = XIA_XID_MAX + sizeof(uint8_t);
-                if ((addr + neigh_init_size) - buf > msglen) {
+                if ((addr + neigh_init_size) - buf_start > msglen) {
                         /* TODO: free memory */
                         return false;
                 }
                 memcpy(neigh, addr, neigh_init_size);
-                if ((addr + neigh->num * packet->haddr_len) - buf > msglen) {
+                if ((addr + neigh->num * packet->haddr_len) - buf_start > msglen) {
                         /* TODO: free memory */
                         return false;
                 }
@@ -88,3 +95,25 @@ bool read_neighbor_list(char *buf, struct nwp_neigh_list *packet, int msglen)
 
         return true;
 }
+
+static void neighbor_free(struct nwp_neighbor *packet)
+{
+        int i;
+        for (i = 0; i < packet->num; i++) {
+                free(packet->haddrs[i]);
+        }
+        free(packet->haddrs);
+        free(packet);
+}
+
+void neighbor_list_free(struct nwp_neigh_list *packet)
+{
+        int i;
+
+        for (i = 0; i < packet->hid_count; i++)
+                neighbor_free(packet->addrs[i]);
+
+        free(packet->addrs);
+        free(packet);
+}
+

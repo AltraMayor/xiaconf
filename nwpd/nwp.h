@@ -30,7 +30,8 @@ struct nwp_announce {
 extern bool read_announce(char *, struct nwp_announce *, int);
 extern void announce_set_ha(struct nwp_announce *, uint8_t *);
 extern void announce_add_xid(struct nwp_announce *, uint8_t *);
-extern int announce_size(struct nwp_announce *packet);
+extern int announce_size(struct nwp_announce *);
+extern void announce_free(struct nwp_announce *);
 
 #define NWP_NEIGHBOUR_LIST 0x02
 
@@ -49,6 +50,7 @@ struct nwp_neighbor {
 };
 
 extern bool read_neighbor_list(char *, struct nwp_neigh_list *, int);
+extern void neighbor_list_free(struct nwp_neigh_list *);
 
 /* Monitoring packets */
 
