@@ -346,7 +346,6 @@ void process_announce(struct sockaddr_ll *addr, struct nwp_announce *announce)
                 fprintf(stderr, "Invalid ether XID: %s", if_ether_xid_str);
                 return;
         }
-        printf("Adding neighbour ether-%s\n",if_ether_xid_str);
         modify_neighbour(&ether_xid, true);
 
         for (i = 0; i < announce->hid_count; i++) {
@@ -354,12 +353,6 @@ void process_announce(struct sockaddr_ll *addr, struct nwp_announce *announce)
                 assert(!ppal_name_to_type("ad", &(ad_src.xid_type)));
                 uint8_t *xid = NWP_ANNOUNCEMENT_GET_HID(announce, i);
                 memcpy(ad_src.xid_id, xid, XIA_XID_MAX);
-
-                printf("Adding route ");
-                print_xia_xid(&ad_src);
-                printf(" -> ");
-                print_xia_xid(&ether_xid);
-                printf("\n");
                 modify_route(&ad_src, &ether_xid);
         }
 
@@ -527,7 +520,7 @@ void *ether_receiver(void *ptr)
                 }
                 msglen -= sizeof(struct ether_header);
 
-                printf("Got NWP Packet type %d, size: %d bytes\n", nwp_common->type, msglen);
+                /* printf("Got NWP Packet type %d, size: %d bytes\n", nwp_common->type, msglen); */
                 switch (nwp_common->type) {
                 case NWP_ANNOUNCEMENT:
                 {
