@@ -265,7 +265,6 @@ static int form_ether_xid(unsigned int oif, unsigned char *lladdr,
 		return -1;
 	return 0;
 }
-
 void send_announce(int socket, struct sockaddr_ll *addr)
 {
         /*routes contains all local ADs*/
@@ -275,14 +274,6 @@ void send_announce(int socket, struct sockaddr_ll *addr)
 
         int i, size, member_size;
         char *buf, *cur_buf;
-
-        char strid[XIA_MAX_STRID_SIZE];
-
-        if (form_ether_xid(addr->sll_ifindex, if_hwaddr, sizeof(strid),
-                           strid) == -1) {
-                fprintf(stderr, "Cannot form ether XID\n");
-                exit(1);
-        }
 
         if (rtnl_send_wilddump_request(xia_nl_socket, AF_XIA, RTM_GETROUTE,
                                        filter_callback, routes) == -1) {
@@ -311,10 +302,9 @@ void send_announce(int socket, struct sockaddr_ll *addr)
         }
 
         if (sendto(socket, buf, size, 0, (struct sockaddr *)addr,
-                   sizeof(*addr)) == -1) {
+                   sizeof(*addr)) == -1)
                 perror("sendto");
-                return;
-        }
+
         free(buf);
         free_filter(routes);
 }
@@ -445,6 +435,36 @@ done:
         return;
 }
 
+void process_neigh_list(struct sockaddr_ll *addr, struct nwp_neigh_list *list)
+{
+        int i;
+        char strid[XIA_MAX_STRID_SIZE];
+        struct xia_xid ad_dst, neigh_xid;
+        assert(!ppal_name_to_type("ad", &ad_dst.xid_type));
+        assert(!ppal_name_to_type("ether", &neigh_xid.xid_type));
+
+        for (i = 0; i < list->hid_count; i++) {
+                struct nwp_neighbor *neigh = list->addrs[i];
+
+                if (neigh->num != 1)
+                        continue;
+                if (memcmp(if_hwaddr, neigh->haddrs[0], list->haddr_len) == 0)
+                        continue;
+
+                if (form_ether_xid(0, neigh->haddrs[0], sizeof(strid), strid) == -1) {
+                        fprintf(stderr, "cannot form ether XID\n");
+                        return;
+                }
+                memcpy(ad_dst.xid_id, neigh->xid, XIA_XID_MAX);
+                if (xia_ptoid(strid, INT_MAX, &neigh_xid) == -1) {
+                        fprintf(stderr, "Invalid ether XID: %s\n", strid);
+                        return;
+                }
+                modify_neighbour(&neigh_xid, true);
+                modify_route(&ad_dst, &neigh_xid);
+        }
+}
+
 void *ether_receiver(void *ptr)
 {
         struct ctxt *ctxt = (struct ctxt *)ptr;
@@ -453,7 +473,7 @@ void *ether_receiver(void *ptr)
         struct nwp_common_hdr *nwp_common = (struct nwp_common_hdr *)nwp_buf;
 
         char if_xid[XIA_MAX_STRID_SIZE];
-        int if_index, sockopt, sock;
+        int if_index, sockopt = 0, sock;
 
         if ((sock = socket(AF_PACKET, SOCK_DGRAM, htons(ETH_P_NWP))) == -1) {
                 perror("socket");
@@ -519,22 +539,19 @@ void *ether_receiver(void *ptr)
                         }
 
                         process_announce(&addr, announce);
-                        free(announce->haddr);
-                        free(announce->addr_begin);
-                        free(announce);
+                        announce_free(announce);
                         break;
                 }
                 case NWP_NEIGHBOUR_LIST:
                 {
-                        struct nwp_neigh_list *neigh = malloc(msglen);
+                        struct nwp_neigh_list *neigh = calloc(1, sizeof(struct nwp_neigh_list));
                         if (!read_neighbor_list(nwp_buf, neigh, msglen)) {
                                 fprintf(stderr, "invalid NWP neighbour list packet, discarding\n");
                                 free(neigh);
                                 continue;
                         }
-                        printf("GOOD packet HID count: %d, Haddr len: %d\n",
-                               neigh->hid_count,
-                               neigh->haddr_len);
+                        process_neigh_list(&addr, neigh);
+                        neighbor_list_free(neigh);
                         break;
                 }
                 case NWP_MONITOR_PING:
