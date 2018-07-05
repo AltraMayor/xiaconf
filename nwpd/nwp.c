@@ -74,12 +74,16 @@ bool read_neighbor_list(char *buf, struct nwp_neigh_list *packet, int msglen)
                 struct nwp_neighbor *neigh = malloc(sizeof(struct nwp_neighbor));
                 size_t neigh_init_size = XIA_XID_MAX + sizeof(uint8_t);
                 if ((addr + neigh_init_size) - buf_start > msglen) {
-                        /* TODO: free memory */
+                        free(neigh);
+                        packet->hid_count--;
+                        neighbor_list_free(packet);
                         return false;
                 }
                 memcpy(neigh, addr, neigh_init_size);
                 if ((addr + neigh->num * packet->haddr_len) - buf_start > msglen) {
-                        /* TODO: free memory */
+                        free(neigh);
+                        packet->hid_count--;
+                        neighbor_list_free(packet);
                         return false;
                 }
 
