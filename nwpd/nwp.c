@@ -121,3 +121,59 @@ void neighbor_list_free(struct nwp_neigh_list *packet)
         free(packet);
 }
 
+bool read_monitor(char *buf, struct nwp_monitor *packet, int msglen)
+{
+        size_t len = sizeof(struct nwp_common_hdr) + 2 * sizeof(uint8_t)
+                + sizeof(int32_t);
+        if (len > msglen)
+                return false;
+
+        memcpy(packet, buf, len);
+        buf += len;
+
+        len += 2 * packet->haddr_len;
+        if (len > msglen)
+                return false;
+
+        packet->haddr_src = malloc(packet->haddr_len);
+        memcpy(packet->haddr_src, buf, packet->haddr_len);
+        buf += packet->haddr_len;
+        packet->haddr_dest = malloc(packet->haddr_len);
+        memcpy(packet->haddr_dest, buf, packet->haddr_len);
+
+        return true;
+}
+
+void monitor_free(struct nwp_monitor *packet)
+{
+        free(packet->haddr_src);
+        free(packet->haddr_dest);
+        free(packet);
+}
+
+bool read_monitor_investigate (char *buf, struct nwp_monitor_investigate *packet, int msglen)
+{
+        size_t len = sizeof(struct nwp_common_hdr) + 2 * sizeof(uint8_t)
+                + sizeof(int32_t);
+        if (len > msglen)
+                return false;
+
+        memcpy(packet, buf, len);
+        buf += len;
+
+        len += 3 * packet->haddr_len;
+        if (len > msglen)
+                return false;
+        packet->haddr_src = malloc(packet->haddr_len);
+        memcpy(packet->haddr_src, buf, packet->haddr_len);
+        buf += packet->haddr_len;
+
+        packet->haddr_dest = malloc(packet->haddr_len);
+        memcpy(packet->haddr_src, buf, packet->haddr_len);
+        buf += packet->haddr_len;
+
+        packet->haddr_investigate = malloc(packet->haddr_len);
+        memcpy(packet->haddr_investigate, buf, packet->haddr_len);
+        
+        return true;
+}

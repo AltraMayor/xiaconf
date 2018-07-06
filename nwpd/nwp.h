@@ -14,7 +14,7 @@
 
 struct nwp_common_hdr {
         uint8_t version;
-        uint8_t type;        
+        uint8_t type;
 };
 
 struct nwp_announce {
@@ -65,8 +65,12 @@ struct nwp_monitor {
         int32_t sender_clock;
 
         /* Sender and Host Hardware Addresses*/
-        uint8_t addr_begin[0];
+        uint8_t *haddr_src;
+        uint8_t *haddr_dest;
 };
+
+extern bool read_monitor(char *, struct nwp_monitor *, int);
+extern void monitor_free(struct nwp_monitor *);
 
 #define NWP_MONITOR_PING_REQUEST 0x05
 #define NWP_MONITOR_INVESTIGATE_PING 0x06
@@ -77,9 +81,10 @@ struct nwp_monitor_investigate {
         uint8_t reserved;
 
         int32_t sender_clock;
-        
-        /* Sender, Host and Investigative Host Hardware Addresses*/
-        uint8_t addr_begin[0];
+
+        uint8_t *haddr_src;
+        uint8_t *haddr_dest;
+        uint8_t *haddr_investigate; /* The host being investigated */
 };
 
 #endif	/* _NWP_H */
