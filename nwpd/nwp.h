@@ -87,4 +87,7 @@ struct nwp_monitor_investigate {
         uint8_t *haddr_investigate; /* The host being investigated */
 };
 
+bool read_monitor_investigate(char *buf, struct nwp_monitor_investigate *packet, int msglen);
+void monitor_investigative_free(struct nwp_monitor_investigate *packet);
+
 #endif	/* _NWP_H */
