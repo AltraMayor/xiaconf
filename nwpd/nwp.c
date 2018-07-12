@@ -151,7 +151,7 @@ void monitor_free(struct nwp_monitor *packet)
         free(packet);
 }
 
-bool read_monitor_investigate (char *buf, struct nwp_monitor_investigate *packet, int msglen)
+bool read_monitor_investigate(char *buf, struct nwp_monitor_investigate *packet, int msglen)
 {
         size_t len = sizeof(struct nwp_common_hdr) + 2 * sizeof(uint8_t)
                 + sizeof(int32_t);
@@ -177,3 +177,12 @@ bool read_monitor_investigate (char *buf, struct nwp_monitor_investigate *packet
         
         return true;
 }
+
+void monitor_investigative_free(struct nwp_monitor_investigate *packet)
+{
+        free(packet->haddr_investigate);
+        free(packet->haddr_dest);
+        free(packet->haddr_src);
+        free(packet);
+}
+
