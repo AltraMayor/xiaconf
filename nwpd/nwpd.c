@@ -28,6 +28,7 @@
 #include "timer.h"
 #include "neigh.h"
 #include "log.h"
+#include "config.h"
 
 struct mnl_socket *xia_nl_socket = NULL;
 
@@ -561,21 +562,17 @@ void *ether_receiver(void *ptr)
 int main(int argc, char **argv)
 {
         srand(time(NULL));
+        init_config(argc, argv);
         xia_nl_socket = mnl_socket_open(NETLINK_ROUTE);
         mnl_socket_bind(xia_nl_socket, 0, getppid());
         setvbuf(stdout, NULL, _IOLBF, 0);
-        nwpd_logf(LOG_LEVEL_INFO, "nwpd v0.1\n");
-        if (argc < 2) {
-                nwpd_logf(LOG_LEVEL_ERROR, "interface not specified, exiting\n");
-                exit(1);
-        }
-
+        nwpd_logf(LOG_LEVEL_INFO, "nwpd v0.1 (reading on %s)\n", nwpd_config.interface);
         assert(!init_ppal_map(NULL));
 
         pthread_t receiver;
 
         init_monitor();
-        struct ctxt *ctxt = new_ctxt(argv[1]);
+        struct ctxt *ctxt = new_ctxt(nwpd_config.interface);
         pthread_create(&receiver, NULL, ether_receiver, ctxt);
         pthread_join(receiver, NULL);
 

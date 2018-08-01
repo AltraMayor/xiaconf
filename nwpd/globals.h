@@ -10,7 +10,11 @@ extern int eth_socket;
 extern uint8_t if_hwaddr[ETH_ALEN];
 
 struct config {
-        /* The time period (in seconds) for try announcing to the network */
+        /* The hardware interface to listen on. */
+        char *interface;
+        /* The minimum log level. */
+        int log_level;
+        /* The time period (in seconds) for try announcing to the network. */
         int try_announce_period;
         /* The time period (in seconds) for attemping to ping a neighbor. */
         int monitor_ping_period;
