@@ -10,7 +10,6 @@
 #include <signal.h>
 
 #include "uthash.h"
-#include "utlist.h"
 
 #include "log.h"
 #include "nwp.h"
