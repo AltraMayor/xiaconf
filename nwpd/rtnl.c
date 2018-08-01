@@ -3,7 +3,9 @@
 #include <errno.h>
 #include <time.h>
 #include <string.h>
+
 #include "rtnl.h"
+#include "log.h"
 
 int rtnl_talk(const struct mnl_socket *nl_socket, struct nlmsghdr *n)
 {
@@ -12,7 +14,7 @@ int rtnl_talk(const struct mnl_socket *nl_socket, struct nlmsghdr *n)
         n->nlmsg_flags |= NLM_F_ACK;
 
         if (mnl_socket_sendto(nl_socket, n, n->nlmsg_len) < 0) {
-                perror("mnl_socket_sendto");
+                nwpd_perror("mnl_socket_sendto");
                 return -1;
         }
 
@@ -21,12 +23,12 @@ int rtnl_talk(const struct mnl_socket *nl_socket, struct nlmsghdr *n)
         int msglen = sizeof(recv_buf);
 
         if (mnl_socket_recvfrom(nl_socket, recv_buf, sizeof(recv_buf)) == -1) {
-                perror("mnl_socket_recvfrom");
+                nwpd_perror("mnl_socket_recvfrom");
                 return -1;
         }
 
         if (!mnl_nlmsg_ok(nlh, msglen)) {
-                fprintf(stderr, "rtnl_talk: Received malformed/truncated message");
+                nwpd_logf(LOG_LEVEL_ERROR, "rtnl_talk: Received malformed/truncated message");
                 return -1;
         }
 
@@ -44,7 +46,7 @@ int rtnl_talk(const struct mnl_socket *nl_socket, struct nlmsghdr *n)
                         errno = -err->error;
                         if (errno == 0)
                                 return 0;
-                        perror("RTNETLINK");
+                        nwpd_perror("RTNETLINK");
                         return -1;
                 }
                 nlh = mnl_nlmsg_next(nlh, &msglen);
@@ -86,7 +88,7 @@ int rtnl_send_wilddump_request(const struct mnl_socket *nl_socket,
                         {
                                 struct nlmsgerr *err = mnl_nlmsg_get_payload(nlh);
                                 errno = -err->error;
-                                perror("RTNETLINK");
+                                nwpd_perror("RTNETLINK");
                                 return -1;
                         }
                         case NLMSG_DONE:
@@ -109,7 +111,7 @@ int parse_rtattr(struct rtattr *tb[], int max, struct rtattr *rta, int len)
 		rta = RTA_NEXT(rta,len);
 	}
 	if (len)
-		fprintf(stderr, "!!!Deficit %d, rta_len=%d\n", len, rta->rta_len);
+		nwpd_logf(LOG_LEVEL_ERROR, "!!!Deficit %d, rta_len=%d\n", len, rta->rta_len);
 	return 0;
 }
 
