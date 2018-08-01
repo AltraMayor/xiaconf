@@ -1,6 +1,4 @@
 #include <libmnl/libmnl.h>
-#include <event2/thread.h>
-#include <event2/event.h>
 
 #include <stdlib.h>
 #include <stdbool.h>
@@ -16,27 +14,34 @@
 #include <linux/if_ether.h>
 #include <net/ethernet.h>
 #include <net/if.h>
+#include <arpa/inet.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <net/xia.h>
+#include <stdatomic.h>
+#include <signal.h>
 
 #include "nwp.h"
+#include "monitor.h"
 #include "rtnl.h"
+#include "globals.h"
+#include "timer.h"
+#include "neigh.h"
+#include "log.h"
 
-struct mnl_socket *xia_nl_socket;
-int subs;
+struct mnl_socket *xia_nl_socket = NULL;
 
-struct sockaddr_ll broadcast_addr;
-int eth_socket;
+struct sockaddr_ll broadcast_addr = {};
+int eth_socket = 0;
 
 uint8_t if_hwaddr[ETH_ALEN];
 
+atomic_int neigh_count = 0;
+atomic_int ad_count = 0;
+atomic_int last_total = 0;
+
 struct ctxt {
         char *dev;
-        int fd;
-        socklen_t addr_len;
-        struct sockaddr_ll addr;
-        struct nwp_common_hdr common;
 };
 
 struct route {
@@ -56,8 +61,31 @@ struct routes {
         xid_type_t gw_type;
 };
 
-struct ctxt *new_ctxt (char *dev) {
-        struct ctxt *ctxt = malloc(sizeof(struct ctxt));
+static bool check_total_change()
+{
+        int me = atomic_load(&ad_count), others = atomic_load(&neigh_count),
+                total = atomic_load(&last_total), old_total = total;
+
+        atomic_store(&last_total, (total = me + others));
+        return total != old_total;
+}
+
+static bool my_turn()
+{
+        int me = atomic_load(&ad_count), others = atomic_load(&neigh_count);
+        uint32_t threshold, r = rand();
+        if (me == 0)
+                return 0;
+        if (others == 0)
+                return 1;
+
+        threshold = (0xffffffffU / (uint32_t)(others + me)) * (uint32_t)me;
+        return r <= threshold;
+}
+
+struct ctxt *new_ctxt (char *dev)
+{
+        struct ctxt *ctxt = calloc(1, sizeof(struct ctxt));
         ctxt->dev = dev;
         return ctxt;
 }
@@ -68,7 +96,7 @@ struct routes *create_filter(int table_index)
 {
         struct routes *routes = calloc(1, sizeof(struct routes));
         if (!routes) {
-                perror("malloc");
+                nwpd_perror("malloc");
                 exit(1);
         }
         routes->table = table_index;
@@ -85,85 +113,27 @@ void free_filter(struct routes *routes)
         free(routes);
 }
 
+static void try_announce(union sigval);
+
 void init_broadcast(int ifindex)
 {
-        int i;
         broadcast_addr.sll_family = AF_PACKET;
         broadcast_addr.sll_protocol = htons(ETH_P_NWP);
         broadcast_addr.sll_halen = ETH_ALEN;
         broadcast_addr.sll_ifindex = ifindex;
-        for (i = 0; i < ETH_ALEN; i++) {
-                broadcast_addr.sll_addr[i] = 0xFF;
-        }
+        memset(broadcast_addr.sll_addr, 0xFF, ETH_ALEN);
 
         eth_socket = socket(AF_PACKET, SOCK_DGRAM, htons(ETH_P_NWP));
         if (eth_socket == -1) {
-                perror("socket");
+                nwpd_perror("socket");
                 exit(1);
         }
-}
 
-
-void modify_neighbour (struct xia_xid *dst, bool add)
-{
-        char buf[MNL_SOCKET_BUFFER_SIZE];
-        struct nlmsghdr *nlh;
-        struct rtmsg *rtm;
-        nlh = mnl_nlmsg_put_header(buf);
-        rtm = mnl_nlmsg_put_extra_header(nlh, sizeof (struct rtmsg));
-        nlh->nlmsg_seq = time(NULL);
-        if (add) {
-                nlh->nlmsg_flags = NLM_F_REQUEST | NLM_F_CREATE | NLM_F_EXCL;
-                nlh->nlmsg_type = RTM_NEWROUTE;
-                rtm->rtm_scope = RT_SCOPE_LINK;
-        } else {
-                nlh->nlmsg_flags = NLM_F_REQUEST;
-                nlh->nlmsg_type = RTM_DELROUTE;
-                rtm->rtm_scope = RT_SCOPE_NOWHERE;
-        }
-
-        rtm->rtm_family = AF_XIA;
-        rtm->rtm_table = XRTABLE_MAIN_INDEX;
-        rtm->rtm_protocol = RTPROT_BOOT;
-        rtm->rtm_type = RTN_UNICAST;
-        rtm->rtm_dst_len = sizeof(struct xia_xid);
-
-        mnl_attr_put(nlh, RTA_DST, sizeof(struct xia_xid), dst);
-
-        if (rtnl_talk(xia_nl_socket, nlh) == -1)
-                fprintf(stderr, "modify_neighbour: Couldn't modify neighbour entry\n");
-}
-
-/* dst should be an AD XID, gw an Ether XID */
-void modify_route(const struct xia_xid *dst, const struct xia_xid *gw)
-{
-        char buf[MNL_SOCKET_BUFFER_SIZE];
-        struct nlmsghdr *nlh = mnl_nlmsg_put_header(buf);
-        struct rtmsg *rtm = mnl_nlmsg_put_extra_header(nlh, sizeof (struct rtmsg));
-
-        nlh->nlmsg_seq = time(NULL);
-        if (gw) {
-                nlh->nlmsg_flags = NLM_F_REQUEST | NLM_F_CREATE | NLM_F_EXCL;
-                nlh->nlmsg_type = RTM_NEWROUTE;
-                rtm->rtm_scope = RT_SCOPE_LINK;
-        } else {
-                nlh->nlmsg_flags = NLM_F_REQUEST;
-                nlh->nlmsg_type = RTM_DELROUTE;
-                rtm->rtm_scope = RT_SCOPE_NOWHERE;
-        }
-
-        rtm->rtm_family = AF_XIA;
-        rtm->rtm_table = XRTABLE_MAIN_INDEX;
-        rtm->rtm_protocol = RTPROT_BOOT;
-        rtm->rtm_type = RTN_UNICAST;
-        rtm->rtm_dst_len = sizeof(struct xia_xid);
-
-        mnl_attr_put(nlh, RTA_DST, sizeof(struct xia_xid), dst);
-        if (gw)
-                mnl_attr_put(nlh, RTA_GATEWAY, sizeof(*gw), gw);
-
-        if (rtnl_talk(xia_nl_socket, nlh) == -1)
-                fprintf(stderr, "modify_route: Couldn't modify route entry\n");
+        timer_t announce_timer = create_timer(try_announce, NULL);
+        struct timespec spec;
+        spec.tv_sec = nwpd_config.try_announce_period;
+        spec.tv_nsec = 0;
+        set_timer(announce_timer, &spec, true);
 }
 
 /* Based on xip/xipad.c:print_route */
@@ -177,28 +147,27 @@ void filter_callback(struct nlmsghdr *n, void *arg)
         struct rtmsg *r = mnl_nlmsg_get_payload(n);
 
         if (!mnl_nlmsg_ok(n, n->nlmsg_len)) {
-                fprintf(stderr, "Received an invalid/truncated message\n");
+                nwpd_logf(LOG_LEVEL_ERROR, "Received an invalid/truncated message\n");
                 return;
         }
 
         if (n->nlmsg_type != RTM_NEWROUTE) {
-                fprintf(stderr, "Not a route: %08x %08x %08x\n",
+                nwpd_logf(LOG_LEVEL_ERROR, "Not a route: %08x %08x %08x\n",
 			n->nlmsg_len, n->nlmsg_type, n->nlmsg_flags);
                 return;
         }
         if (n->nlmsg_type == RTM_DELROUTE)
                 return;
-        if (r->rtm_family != AF_XIA) {
+        if (r->rtm_family != AF_XIA)
                 return;
-        }
 
         len -= NLMSG_LENGTH(sizeof(*r));
         if (len < 0) {
-                fprintf(stderr, "BUG: wrong nlmsg len %d\n", len);
+                nwpd_logf(LOG_LEVEL_ERROR, "BUG: wrong nlmsg len %d\n", len);
 		return;
         }
         if (r->rtm_dst_len != sizeof(struct xia_xid)) {
-		fprintf(stderr, "BUG: wrong rtm_dst_len %d\n", r->rtm_dst_len);
+		nwpd_logf(LOG_LEVEL_ERROR, "BUG: wrong rtm_dst_len %d\n", r->rtm_dst_len);
 		return;
 	}
 
@@ -244,7 +213,7 @@ void filter_callback(struct nlmsghdr *n, void *arg)
 
         routes->routes[index] = calloc(1, sizeof(struct route));
         if (!routes->routes) {
-                perror("malloc");
+                nwpd_perror("malloc");
                 exit(1);
         }
         if (gw)
@@ -265,6 +234,7 @@ static int form_ether_xid(unsigned int oif, unsigned char *lladdr,
 		return -1;
 	return 0;
 }
+
 void send_announce(int socket, struct sockaddr_ll *addr)
 {
         /*routes contains all local ADs*/
@@ -277,10 +247,11 @@ void send_announce(int socket, struct sockaddr_ll *addr)
 
         if (rtnl_send_wilddump_request(xia_nl_socket, AF_XIA, RTM_GETROUTE,
                                        filter_callback, routes) == -1) {
-                perror("rtnl_send_wilddump_request");
+                nwpd_perror("rtnl_send_wilddump_request");
                 exit(1);
         }
 
+        atomic_store(&ad_count, routes->n);
         struct nwp_announce ann;
         ann.common.type = NWP_ANNOUNCEMENT;
         ann.common.version = 0x01;
@@ -303,60 +274,68 @@ void send_announce(int socket, struct sockaddr_ll *addr)
 
         if (sendto(socket, buf, size, 0, (struct sockaddr *)addr,
                    sizeof(*addr)) == -1)
-                perror("sendto");
+                nwpd_perror("sendto");
 
         free(buf);
         free_filter(routes);
 }
 
-void *announce_loop(void *_arg)
+static void try_announce(union sigval s)
 {
-        while(1) {
+        if (check_total_change() || my_turn())
                 send_announce(eth_socket, &broadcast_addr);
-                sleep(5);
-        }
 }
 
-void process_announce(struct sockaddr_ll *addr, struct nwp_announce *announce)
+void process_announce(struct sockaddr_ll *addr,
+                      struct nwp_announce *announce)
 {
         char if_ether_xid_str[XIA_MAX_STRID_SIZE];
         int i;
 
         if (announce->hid_count > 1) {
-                fprintf(stderr, "packet has more than one HID, discarding\n");
+                nwpd_logf(LOG_LEVEL_ERROR, "packet has more than one HID, discarding\n");
                 return;
         }
         if (announce->haddr_len != addr->sll_halen) {
-                fprintf(stderr, "hardware address length is different in the packet and the sender's sockaddr_ll value, discarding\n");
+                nwpd_logf(LOG_LEVEL_ERROR, "hardware address length is different in the packet and the sender's sockaddr_ll value, discarding\n");
                 return;
         }
+        if (memcmp(addr->sll_addr, announce->haddr, announce->haddr_len) != 0) {
+                nwpd_logf(LOG_LEVEL_ERROR, "invalid source hardware address in NWP packet, discarding\n");
+        }
         if (memcmp(announce->haddr, if_hwaddr, announce->haddr_len) == 0) {
-                fprintf(stderr, "packet has a duplicate hardware address, discarding\n");
+                nwpd_logf(LOG_LEVEL_ERROR, "packet has a duplicate hardware address, discarding\n");
                 return;
         }
 
-        struct xia_xid ether_xid;
+        struct xia_xid *ether_xid = malloc(sizeof(struct xia_xid));
         if (form_ether_xid(addr->sll_ifindex, addr->sll_addr,
                            sizeof(if_ether_xid_str), if_ether_xid_str)) {
-                fprintf(stderr, "Could not form ether XID for the address\n");
+                nwpd_logf(LOG_LEVEL_ERROR, "Could not form ether XID for the address\n");
                 return;
         }
-        assert(!ppal_name_to_type("ether", &ether_xid.xid_type));
-        if (xia_ptoid(if_ether_xid_str, INT_MAX, &ether_xid) == -1) {
-                fprintf(stderr, "Invalid ether XID: %s", if_ether_xid_str);
+        assert(!ppal_name_to_type("ether", &ether_xid->xid_type));
+        if (xia_ptoid(if_ether_xid_str, INT_MAX, ether_xid) == -1) {
+                nwpd_logf(LOG_LEVEL_ERROR, "Invalid ether XID: %s\n", if_ether_xid_str);
                 return;
         }
-        modify_neighbour(&ether_xid, true);
+        modify_neighbour(ether_xid, true);
 
         for (i = 0; i < announce->hid_count; i++) {
                 struct xia_xid ad_src;
                 assert(!ppal_name_to_type("ad", &(ad_src.xid_type)));
                 uint8_t *xid = NWP_ANNOUNCEMENT_GET_HID(announce, i);
                 memcpy(ad_src.xid_id, xid, XIA_XID_MAX);
-                modify_route(&ad_src, &ether_xid);
+                modify_route(&ad_src, ether_xid);
         }
 
-        send_neigh_list(eth_socket, addr, announce->haddr_len);
+        struct sockaddr_ll *malloc_addr = malloc(sizeof(struct sockaddr_ll));
+        memcpy(malloc_addr, addr, sizeof(struct sockaddr_ll));
+
+        monitor_add_host(malloc_addr, ether_xid);
+        if (my_turn())
+                send_neigh_list(eth_socket, addr, ETH_ALEN);
+        atomic_fetch_add(&neigh_count, 1);
 }
 
 void send_neigh_list(int socket, struct sockaddr_ll *addr, int haddr_len)
@@ -372,11 +351,12 @@ void send_neigh_list(int socket, struct sockaddr_ll *addr, int haddr_len)
 
         if (rtnl_send_wilddump_request(xia_nl_socket, AF_XIA, RTM_GETROUTE,
                                        filter_callback, neighs) == -1) {
-                perror("rtnl_send_wilddump_request");
+                nwpd_perror("rtnl_send_wilddump_request");
                 free(neighs);
                 return;
         }
 
+        atomic_store(&neigh_count, neighs->n);
         size = member_size + neighs->n * neigh_size;
         buf = cur_buf = calloc(1, size);
 
@@ -395,13 +375,13 @@ void send_neigh_list(int socket, struct sockaddr_ll *addr, int haddr_len)
                 assert(!ppal_name_to_type("ad", &routes->dst_type));
                 assert(!ppal_name_to_type("ether", &routes->gw_type));
 
-                struct xia_xid eth_xid ;
+                struct xia_xid eth_xid;
                 eth_xid.xid_type = routes->gw_type;
                 memcpy(eth_xid.xid_id, neighs->routes[i]->dst_xid, XIA_XID_MAX);
                 routes->gw = &eth_xid;
                 if (rtnl_send_wilddump_request(xia_nl_socket, AF_XIA, RTM_GETROUTE,
                                        filter_callback, routes) == -1) {
-                        perror("rtnl_send_wilddump_request");
+                        nwpd_perror("rtnl_send_wilddump_request");
                         free_filter(routes);
                         goto done;
                 }
@@ -417,10 +397,8 @@ void send_neigh_list(int socket, struct sockaddr_ll *addr, int haddr_len)
         }
 
         if (sendto(socket, buf, size, 0, (struct sockaddr *)addr,
-                   sizeof(*addr)) == -1) {
-                perror("sendto");
-        }
-
+                   sizeof(*addr)) == -1)
+                nwpd_perror("sendto");
 
 done:
         free(buf);
@@ -428,7 +406,8 @@ done:
         return;
 }
 
-void process_neigh_list(struct sockaddr_ll *addr, struct nwp_neigh_list *list)
+void process_neigh_list(struct sockaddr_ll *addr,
+                        struct nwp_neigh_list *list)
 {
         int i;
         char strid[XIA_MAX_STRID_SIZE];
@@ -445,16 +424,17 @@ void process_neigh_list(struct sockaddr_ll *addr, struct nwp_neigh_list *list)
                         continue;
 
                 if (form_ether_xid(0, neigh->haddrs[0], sizeof(strid), strid) == -1) {
-                        fprintf(stderr, "cannot form ether XID\n");
+                        nwpd_logf(LOG_LEVEL_ERROR, "cannot form ether XID\n");
                         return;
                 }
                 memcpy(ad_dst.xid_id, neigh->xid, XIA_XID_MAX);
                 if (xia_ptoid(strid, INT_MAX, &neigh_xid) == -1) {
-                        fprintf(stderr, "Invalid ether XID: %s\n", strid);
+                        nwpd_logf(LOG_LEVEL_ERROR, "Invalid ether XID: %s\n", strid);
                         return;
                 }
                 modify_neighbour(&neigh_xid, true);
                 modify_route(&ad_dst, &neigh_xid);
+                monitor_add_host(addr, &neigh_xid);
         }
 }
 
@@ -469,7 +449,7 @@ void *ether_receiver(void *ptr)
         int if_index, sockopt = 0, sock;
 
         if ((sock = socket(AF_PACKET, SOCK_DGRAM, htons(ETH_P_NWP))) == -1) {
-                perror("socket");
+                nwpd_perror("socket");
                 exit(1);
         }
 
@@ -483,50 +463,48 @@ void *ether_receiver(void *ptr)
                 init_broadcast(if_index);
                 ifr.ifr_flags |= IFF_PROMISC;
                 if (ioctl(sock, SIOCSIFFLAGS, &ifr) == -1) {
-                        perror("SIOCSIFFLAGS");
+                        nwpd_perror("SIOCSIFFLAGS");
                         exit(1);
                 }
         }
 
         if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &sockopt, sizeof(sockopt)) == -1) {
-                perror("SO_REUSEADDR");
+                nwpd_perror("SO_REUSEADDR");
                 close(sock);
                 exit(1);
         }
         if (setsockopt(sock, SOL_SOCKET, SO_BINDTODEVICE, ctxt->dev, IFNAMSIZ-1) == -1) {
-                perror("SO_BINDTODEVICE");
+                nwpd_perror("SO_BINDTODEVICE");
                 close(sock);
                 exit(1);
         }
 
         if (form_ether_xid(if_index, (unsigned char *)if_hwaddr, sizeof(if_xid), if_xid)) {
-                fprintf(stderr, "Could not form ether XID\n");
+                nwpd_logf(LOG_LEVEL_ERROR, "Could not form ether XID\n");
                 exit(1);
         }
 
-        pthread_t announce_loop_thread;
-        pthread_create(&announce_loop_thread, NULL, announce_loop, ctxt);
-        ctxt->fd = sock;
-        printf("Listening on ether-%s\n", if_xid);
+        send_announce(eth_socket, &broadcast_addr);
+        nwpd_logf(LOG_LEVEL_DEBUG,"Listening on ether-%s\n", if_xid);
         while(1) {
                 struct sockaddr_ll addr;
                 socklen_t addr_len = sizeof(struct sockaddr_ll);
                 int msglen;
 
-                if ((msglen = recvfrom(ctxt->fd, nwp_buf, 1500, 0, (struct sockaddr *)&addr,
+                if ((msglen = recvfrom(sock, nwp_buf, 1500, 0, (struct sockaddr *)&addr,
                              &addr_len)) == -1) {
-                        perror("recvfrom");
+                        nwpd_perror("recvfrom");
                         exit(1);
                 }
                 msglen -= sizeof(struct ether_header);
 
-                /* printf("Got NWP Packet type %d, size: %d bytes\n", nwp_common->type, msglen); */
+                nwpd_logf(LOG_LEVEL_DEBUG, "Got NWP Packet type %d, size: %d bytes\n", nwp_common->type, msglen);
                 switch (nwp_common->type) {
                 case NWP_ANNOUNCEMENT:
                 {
                         struct nwp_announce *announce = calloc(1, sizeof(struct nwp_announce));
                         if (!read_announce(nwp_buf, announce, msglen)) {
-                                fprintf(stderr, "invalid NWP announce packet, discarding\n");
+                                nwpd_logf(LOG_LEVEL_ERROR, "invalid NWP announce packet, discarding\n");
                                 free(announce);
                                 continue;
                         }
@@ -539,7 +517,7 @@ void *ether_receiver(void *ptr)
                 {
                         struct nwp_neigh_list *neigh = calloc(1, sizeof(struct nwp_neigh_list));
                         if (!read_neighbor_list(nwp_buf, neigh, msglen)) {
-                                fprintf(stderr, "invalid NWP neighbour list packet, discarding\n");
+                                nwpd_logf(LOG_LEVEL_ERROR, "invalid NWP neighbour list packet, discarding\n");
                                 free(neigh);
                                 continue;
                         }
@@ -548,35 +526,47 @@ void *ether_receiver(void *ptr)
                         break;
                 }
                 case NWP_MONITOR_PING:
-                {
-                        break;
-                }
                 case NWP_MONITOR_ACK:
                 {
+                        struct nwp_monitor *monitor = calloc(1, sizeof(struct nwp_monitor));
+                        if (!read_monitor(nwp_buf, monitor, msglen)) {
+                                nwpd_logf(LOG_LEVEL_ERROR, "invalid NWP monitor packet, discarding\n");
+                                free(monitor);
+                                continue;
+                        }
+                        process_monitor(&addr, monitor);
+                        monitor_free(monitor);
                         break;
                 }
                 case NWP_MONITOR_PING_REQUEST:
-                {
-                        break;
-                }
                 case NWP_MONITOR_INVESTIGATE_PING:
                 {
+                        struct nwp_monitor_investigate *packet =
+                                calloc(1, sizeof(struct nwp_monitor_investigate));
+                        if (!read_monitor_investigate(nwp_buf, packet, msglen)) {
+                                nwpd_logf(LOG_LEVEL_ERROR, "invalid NWP monitor investigative, discarding\n");
+                                free(packet);
+                                continue;
+                        }
+                        process_monitor_investigate(&addr, packet);
+                        monitor_investigative_free(packet);
                         break;
                 }
                 default:
-                        printf("Unknown NWP packet type: %d\n", nwp_common->type);
+                        nwpd_logf(LOG_LEVEL_WARNING, "Unknown NWP packet type: %d\n", nwp_common->type);
                 }
         }
 }
 
 int main(int argc, char **argv)
 {
+        srand(time(NULL));
         xia_nl_socket = mnl_socket_open(NETLINK_ROUTE);
-        mnl_socket_bind(xia_nl_socket, subs, getppid());
+        mnl_socket_bind(xia_nl_socket, 0, getppid());
         setvbuf(stdout, NULL, _IOLBF, 0);
-        printf("nwpd v0.1\n");
+        nwpd_logf(LOG_LEVEL_INFO, "nwpd v0.1\n");
         if (argc < 2) {
-                fprintf(stderr, "interface not specified, exiting\n");
+                nwpd_logf(LOG_LEVEL_ERROR, "interface not specified, exiting\n");
                 exit(1);
         }
 
@@ -584,6 +574,7 @@ int main(int argc, char **argv)
 
         pthread_t receiver;
 
+        init_monitor();
         struct ctxt *ctxt = new_ctxt(argv[1]);
         pthread_create(&receiver, NULL, ether_receiver, ctxt);
         pthread_join(receiver, NULL);
