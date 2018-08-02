@@ -5,11 +5,15 @@
 #include <time.h>
 #include <string.h>
 #include <stdlib.h>
+#include <errno.h>
 
 #include "log.h"
+#include "globals.h"
 
 void nwpd_logf(const int level, const char *fmt, ...)
 {
+        if (level < nwpd_config.log_level)
+                return;
         char *level_str;
 
         switch (level) {
@@ -44,9 +48,7 @@ void nwpd_logf(const int level, const char *fmt, ...)
 
 void nwpd_perror(const char *str)
 {
-        time_t t = time(NULL);
-        fprintf(stderr, "[%s] [error] %s: ", strtok(ctime(&t), "\n"), str);
-        perror(NULL);
+        nwpd_logf(LOG_LEVEL_ERROR, strerror(errno));
 }
 
 char *xid_str(const struct xia_xid *xid)
