@@ -136,5 +136,7 @@ void init_config(int argc, char **argv)
 
         if (nwpd_config.interface == NULL) {
                 fprintf(stderr, "nwpd: interface not mentioned\n");
+                print_help();
+                exit(1);
         }
 }
