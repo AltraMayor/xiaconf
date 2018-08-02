@@ -254,6 +254,7 @@ void monitor_on_investigative_ack_timeout(union sigval s)
 
         nwpd_logf(LOG_LEVEL_DEBUG, "Investigative ack timeout for %s\n",
                   xid_str(host->xid));
+        modify_neighbour(host->xid, false);
 
         pthread_rwlock_wrlock(&hosts_table_lock);
         HASH_DEL(hosts_table, host);
@@ -267,7 +268,6 @@ void monitor_on_investigative_ack_timeout(union sigval s)
         free(host);
 
         pthread_rwlock_unlock(&hosts_table_lock);
-        modify_neighbour(host->xid, false);
 }
 
 void monitor_on_ack_timeout(union sigval s)
