@@ -16,7 +16,7 @@ struct config nwpd_config = {
 };
 
 static char const *const usage_message =
-        "usage: dhcpcd \t -i interface [-hlapkvn]\n"
+        "usage: nwpd \t -i interface [-hlapkvn]\n"
         "\t\t[-h, --help]\n"
         "\t\t[-i, --interface iface]\n"
         "\t\t[-l, --log-level level]\n"
