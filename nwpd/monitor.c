@@ -189,7 +189,6 @@ void process_monitor_investigate(struct sockaddr_ll *addr,
                 return;
         switch (packet->common.type) {
         case NWP_MONITOR_PING_REQUEST:
-                nwpd_logf(LOG_LEVEL_DEBUG, "Got ping request\n");
                 send_monitor_investigate(eth_socket, addr,
                                          NWP_MONITOR_INVESTIGATE_PING,
                                          (char *)packet->haddr_src,
@@ -203,7 +202,7 @@ void process_monitor_investigate(struct sockaddr_ll *addr,
                         return;
                 send_monitor(eth_socket, addr, NWP_MONITOR_ACK,
                              (char *)if_hwaddr, (char *)packet->haddr_src);
-                /*TODO: Broadcast an announcement.*/
+                send_announce(eth_socket, &broadcast_addr);
                 break;
         }
 
