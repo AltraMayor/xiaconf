@@ -1,6 +1,7 @@
 #include <net/xia.h>
 #include <net/xia_fib.h>
 #include <xia_socket.h>
+#include <pthread.h>
 #include <time.h>
 
 #include "rtnl.h"
@@ -8,7 +9,7 @@
 #include "log.h"
 #include "neigh.h"
 
-void modify_neighbour(struct xia_xid *dst, bool add)
+void modify_neighbor(struct xia_xid *dst, bool add)
 {
         char buf[MNL_SOCKET_BUFFER_SIZE];
         struct nlmsghdr *nlh;

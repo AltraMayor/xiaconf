@@ -320,7 +320,7 @@ void process_announce(struct sockaddr_ll *addr,
                 nwpd_logf(LOG_LEVEL_ERROR, "Invalid ether XID: %s\n", if_ether_xid_str);
                 return;
         }
-        modify_neighbour(ether_xid, true);
+        modify_neighbor(ether_xid, true);
 
         for (i = 0; i < announce->hid_count; i++) {
                 struct xia_xid ad_src;
@@ -433,9 +433,8 @@ void process_neigh_list(struct sockaddr_ll *addr,
                         nwpd_logf(LOG_LEVEL_ERROR, "Invalid ether XID: %s\n", strid);
                         return;
                 }
-                modify_neighbour(&neigh_xid, true);
-                modify_route(&ad_dst, &neigh_xid);
-                monitor_add_host(addr, &neigh_xid);
+                modify_neighbor(&neigh_xid, true);
+                modify_route(ad_dst, &neigh_xid);
         }
 }
 
