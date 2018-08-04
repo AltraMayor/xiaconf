@@ -21,7 +21,7 @@
 struct host_clock *hosts_table = NULL;
 pthread_rwlock_t hosts_table_lock;
 
-void monitor_start_ping_process(union sigval);
+static void monitor_start_ping_process(union sigval);
 
 void init_monitor()
 {
