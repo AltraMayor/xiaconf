@@ -292,7 +292,10 @@ void process_announce(struct sockaddr_ll *addr,
 {
         char if_ether_xid_str[XIA_MAX_STRID_SIZE];
         int i;
+        xid_type_t ad_type;
+        struct xia_xid **ad_xids = calloc(announce->hid_count, sizeof(struct xia_xid));
 
+        assert(!ppal_name_to_type("ad", &ad_type));
         if (announce->hid_count > 1) {
                 nwpd_logf(LOG_LEVEL_ERROR, "packet has more than one HID, discarding\n");
                 return;
@@ -323,17 +326,19 @@ void process_announce(struct sockaddr_ll *addr,
         modify_neighbor(ether_xid, true);
 
         for (i = 0; i < announce->hid_count; i++) {
-                struct xia_xid ad_src;
-                assert(!ppal_name_to_type("ad", &(ad_src.xid_type)));
+                struct xia_xid *ad_src = malloc(sizeof(struct xia_xid));
+                ad_src->xid_type = ad_type;
+                ad_xids[i] = ad_src;
+
                 uint8_t *xid = NWP_ANNOUNCEMENT_GET_HID(announce, i);
-                memcpy(ad_src.xid_id, xid, XIA_XID_MAX);
-                modify_route(&ad_src, ether_xid);
+                memcpy(ad_src->xid_id, xid, XIA_XID_MAX);
+                modify_route(ad_src, ether_xid);
         }
 
         struct sockaddr_ll *malloc_addr = malloc(sizeof(struct sockaddr_ll));
         memcpy(malloc_addr, addr, sizeof(struct sockaddr_ll));
 
-        monitor_add_host(malloc_addr, ether_xid);
+        monitor_add_host(malloc_addr, ether_xid, ad_xids, announce->hid_count);
         if (my_turn())
                 send_neigh_list(eth_socket, addr, ETH_ALEN);
         atomic_fetch_add(&neigh_count, 1);
@@ -412,13 +417,18 @@ void process_neigh_list(struct sockaddr_ll *addr,
 {
         int i;
         char strid[XIA_MAX_STRID_SIZE];
-        struct xia_xid ad_dst, neigh_xid;
-        assert(!ppal_name_to_type("ad", &ad_dst.xid_type));
+        struct xia_xid neigh_xid;
+        struct xia_xid **ad_xids = calloc(list->hid_count, sizeof(struct xia_xid));
+        xid_type_t ad_type;
+
+        assert(!ppal_name_to_type("ad", &ad_type));
         assert(!ppal_name_to_type("ether", &neigh_xid.xid_type));
 
         for (i = 0; i < list->hid_count; i++) {
                 struct nwp_neighbor *neigh = list->addrs[i];
+                struct xia_xid *ad_dst = malloc(sizeof(struct xia_xid));
 
+                ad_dst->xid_type = ad_type;
                 if (neigh->num != 1)
                         continue;
                 if (memcmp(if_hwaddr, neigh->haddrs[0], list->haddr_len) == 0)
@@ -428,14 +438,16 @@ void process_neigh_list(struct sockaddr_ll *addr,
                         nwpd_logf(LOG_LEVEL_ERROR, "cannot form ether XID\n");
                         return;
                 }
-                memcpy(ad_dst.xid_id, neigh->xid, XIA_XID_MAX);
+                memcpy(ad_dst->xid_id, neigh->xid, XIA_XID_MAX);
                 if (xia_ptoid(strid, INT_MAX, &neigh_xid) == -1) {
                         nwpd_logf(LOG_LEVEL_ERROR, "Invalid ether XID: %s\n", strid);
                         return;
                 }
                 modify_neighbor(&neigh_xid, true);
                 modify_route(ad_dst, &neigh_xid);
+                ad_xids[i] = ad_dst;
         }
+        monitor_add_host(addr, &neigh_xid, ad_xids, list->hid_count);
 }
 
 void *ether_receiver(void *ptr)

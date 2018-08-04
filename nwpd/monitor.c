@@ -42,8 +42,9 @@ static int host_clock_cmp(void *v1, void *v2)
         return 1;
 }
 
-/* Both addr and xid should be malloc-allocated */
-void monitor_add_host(struct sockaddr_ll *addr, struct xia_xid *xid)
+/* addr, ether_xid, and ad_xids should be malloc-allocated */
+void monitor_add_host(struct sockaddr_ll *addr, struct xia_xid *ether_xid,
+                      struct xia_xid **ad_xids, int n_ads)
 {
         struct host_clock *tmp, *host;
         pthread_rwlock_wrlock(&hosts_table_lock);
@@ -51,24 +52,34 @@ void monitor_add_host(struct sockaddr_ll *addr, struct xia_xid *xid)
         if (tmp == NULL) {
                 host = calloc(1, sizeof(struct host_clock));
                 host->addr = addr;
-                host->xid = xid;
+                host->ether_xid = ether_xid;
+                host->ad_xids = ad_xids;
+                host->n_ads = n_ads;
                 host->haddr = (char *)addr->sll_addr;
                 pthread_rwlock_init(&host->lock, NULL);
 
                 HASH_ADD_KEYPTR(hh, hosts_table, addr->sll_addr, addr->sll_halen, host);
                 HASH_SORT(hosts_table, host_clock_cmp);
-                nwpd_logf(LOG_LEVEL_DEBUG, "monitoring: Adding %s", xid_str(xid));
+                nwpd_logf(LOG_LEVEL_INFO, "Adding neighbor %s", xid_str(ether_xid));
         }
         pthread_rwlock_unlock(&hosts_table_lock);
 }
 
-static const inline size_t monitor_size()
+static void remove_neighbor(struct host_clock *host)
+{
+        int i = 0;
+        modify_neighbor(host->ether_xid, false);
+        for (i = 0; i < host->n_ads; i++)
+                modify_route(host->ad_xids[i], NULL);
+}
+
+inline static size_t monitor_size()
 {
         return sizeof(struct nwp_common_hdr) + 2 * sizeof(uint8_t)
                 + sizeof(int32_t) + 2 * ETH_ALEN * sizeof(uint8_t);
 }
 
-static const inline size_t monitor_investigate_size()
+inline static size_t monitor_investigate_size()
 {
         return monitor_size() + ETH_ALEN * sizeof(uint8_t);
 }
@@ -154,7 +165,7 @@ void process_monitor(struct sockaddr_ll *addr,
 
         switch (packet->common.type) {
         case NWP_MONITOR_PING:
-                nwpd_logf(LOG_LEVEL_DEBUG, "Got a ping from %s\n", xid_str(host->xid));
+                nwpd_logf(LOG_LEVEL_DEBUG, "Got a ping from %s\n", xid_str(host->ether_xid));
                 pthread_rwlock_wrlock(&host->lock);
                 host->clock = packet->sender_clock;
                 pthread_rwlock_unlock(&host->lock);
@@ -162,7 +173,7 @@ void process_monitor(struct sockaddr_ll *addr,
                              (char *)packet->haddr_dest, (char *)addr->sll_addr);
                 break;
         default: /* NWP_MONITOR_ACK */
-                nwpd_logf(LOG_LEVEL_DEBUG, "Got ack from %s\n", xid_str(host->xid));
+                nwpd_logf(LOG_LEVEL_DEBUG, "Got ack from %s\n", xid_str(host->ether_xid));
                 pthread_rwlock_wrlock(&host->lock);
                 if (host->waiting_for_ack) {
                         host->waiting_for_ack = false;
@@ -247,20 +258,19 @@ static struct host_clock *get_random_host()
         return h;
 }
 
-void monitor_on_investigative_ack_timeout(union sigval s)
+static void monitor_on_investigative_ack_timeout(union sigval s)
 {
         struct host_clock *host = (struct host_clock *)s.sival_ptr;
 
-        nwpd_logf(LOG_LEVEL_DEBUG, "Investigative ack timeout for %s\n",
-                  xid_str(host->xid));
-        modify_neighbour(host->xid, false);
+        nwpd_logf(LOG_LEVEL_INFO, "Removing neighbor %s", xid_str(host->ether_xid));
+        remove_neighbor(host);
 
         pthread_rwlock_wrlock(&hosts_table_lock);
         HASH_DEL(hosts_table, host);
 
         pthread_rwlock_wrlock(&host->lock);
         free(host->addr);
-        free(host->xid);
+        free(host->ether_xid);
         pthread_rwlock_unlock(&host->lock);
 
         pthread_rwlock_destroy(&host->lock);
@@ -269,12 +279,12 @@ void monitor_on_investigative_ack_timeout(union sigval s)
         pthread_rwlock_unlock(&hosts_table_lock);
 }
 
-void monitor_on_ack_timeout(union sigval s)
+static void monitor_on_ack_timeout(union sigval s)
 {
         struct host_clock *host = (struct host_clock *)s.sival_ptr, *h;
         int i = 0;
 
-        nwpd_logf(LOG_LEVEL_DEBUG, "Ack timeout %s\n", xid_str(host->xid));
+        nwpd_logf(LOG_LEVEL_DEBUG, "Ack timeout %s\n", xid_str(host->ether_xid));
 
         pthread_rwlock_wrlock(&host->lock);
         host->waiting_for_investigative_ack = true;
@@ -299,7 +309,7 @@ void monitor_on_ack_timeout(union sigval s)
         pthread_rwlock_unlock(&host->lock);
 }
 
-void monitor_start_ping_process(union sigval s)
+static void monitor_start_ping_process(union sigval s)
 {
         struct host_clock *h = get_random_host();
 
@@ -311,7 +321,7 @@ void monitor_start_ping_process(union sigval s)
         h->timeout = create_timer(monitor_on_ack_timeout, h);
         struct timespec spec = {.tv_sec = nwpd_config.monitor_ack_timeout};
         set_timer(h->timeout, &spec, false);
-        nwpd_logf(LOG_LEVEL_DEBUG, "Sending periodic ping to %s\n", xid_str(h->xid));
+        nwpd_logf(LOG_LEVEL_DEBUG, "Sending periodic ping to %s\n", xid_str(h->ether_xid));
         send_monitor(eth_socket, h->addr, NWP_MONITOR_PING, (char *)if_hwaddr, h->haddr);
         pthread_rwlock_unlock(&h->lock);
 }

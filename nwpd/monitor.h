@@ -15,7 +15,9 @@ struct host_clock {
         char *haddr; /* same pointer as addr->sll_addr */
         pthread_rwlock_t lock;
         struct sockaddr_ll *addr;
-        struct xia_xid *xid;
+        struct xia_xid *ether_xid;
+        int n_ads;
+        struct xia_xid **ad_xids;
         int32_t clock;
         bool waiting_for_ack;
         bool waiting_for_investigative_ack;
@@ -24,7 +26,7 @@ struct host_clock {
 };
 
 extern void init_monitor();
-extern void monitor_add_host(struct sockaddr_ll *, struct xia_xid *);
+extern void monitor_add_host(struct sockaddr_ll *, struct xia_xid *, struct xia_xid **, int);
 extern void send_monitor(int, struct sockaddr_ll *, uint8_t,  char *, char *);
 extern void send_monitor_investigate(int, struct sockaddr_ll *, uint8_t, char *,
                                      char *, char *);

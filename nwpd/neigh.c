@@ -1,7 +1,6 @@
 #include <net/xia.h>
 #include <net/xia_fib.h>
 #include <xia_socket.h>
-#include <pthread.h>
 #include <time.h>
 
 #include "rtnl.h"
