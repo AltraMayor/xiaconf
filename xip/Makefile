@@ -11,7 +11,7 @@ XIP_OBJ = $(XIP_OBJ_BASE) $(XIP_OBJ_EXTRA) $(XIP_OBJ_INCLUDE)
 XIP_OBJ_BASE = libnetlink.o
 XIP_OBJ_EXTRA = ppk.o utils.o ll_map.o
 XIP_OBJ_INCLUDE = xip.o xiart.o xipad.o xipdst.o xipether.o xiplpm.o \
-xipserval.o xipu4id.o xipxdp.o xipzf.o
+xipserval.o xipu4id.o xipu6id.o xipxdp.o xipzf.o
 XIP_OBJ_PROD = $(XIPHID_OBJ_PROD)
 XIP_OBJ_TEST = $(XIPHID_OBJ_TEST)
 
