@@ -1,6 +1,6 @@
 CC=gcc
 CFLAGS= -Wall -MMD -I ../kernel-include -I ../include $(ADD_CFLAGS)
-LDFLAGS = -g -L ../libxia -lmnl -pthread -lxia -lrt $(ADD_LDFLAGS)
+LDFLAGS = -g -L ../libxia -lmnl -pthread -lxia -lrt -lucl $(ADD_LDFLAGS)
 
 NWPD_OBJ = nwpd.o nwp.o rtnl.o monitor.o timer.o config.o log.o neigh.o
 
