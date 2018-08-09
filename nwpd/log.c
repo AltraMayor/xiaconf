@@ -44,6 +44,9 @@ void nwpd_logf(const int level, const char *fmt, ...)
         va_start(args, fmt);
         vfprintf(stderr, fmt, args);
         va_end(args);
+
+        if (level == LOG_LEVEL_FATAL)
+                exit(1);
 }
 
 void nwpd_perror(const char *str)
