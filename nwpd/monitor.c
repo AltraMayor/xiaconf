@@ -60,13 +60,14 @@ void monitor_add_host(struct sockaddr_ll *addr, struct xia_xid *ether_xid,
 
                 HASH_ADD_KEYPTR(hh, hosts_table, addr->sll_addr, addr->sll_halen, host);
                 HASH_SORT(hosts_table, host_clock_cmp);
-                nwpd_logf(LOG_LEVEL_INFO, "Adding neighbor %s", xid_str(ether_xid));
+                nwpd_logf(LOG_LEVEL_INFO, "Added neighbor %s\n", xid_str(ether_xid));
         }
         pthread_rwlock_unlock(&hosts_table_lock);
 }
 
 static void remove_neighbor(struct host_clock *host)
 {
+        nwpd_logf(LOG_LEVEL_INFO, "Removing neighbor %s\n", xid_str(host->ether_xid));
         int i = 0;
         modify_neighbor(host->ether_xid, false);
         for (i = 0; i < host->n_ads; i++)
@@ -262,7 +263,6 @@ static void monitor_on_investigative_ack_timeout(union sigval s)
 {
         struct host_clock *host = (struct host_clock *)s.sival_ptr;
 
-        nwpd_logf(LOG_LEVEL_INFO, "Removing neighbor %s", xid_str(host->ether_xid));
         remove_neighbor(host);
 
         pthread_rwlock_wrlock(&hosts_table_lock);
