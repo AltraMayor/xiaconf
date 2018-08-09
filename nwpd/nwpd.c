@@ -576,7 +576,6 @@ int main(int argc, char **argv)
         init_config(argc, argv);
         xia_nl_socket = mnl_socket_open(NETLINK_ROUTE);
         mnl_socket_bind(xia_nl_socket, 0, getppid());
-        setvbuf(stdout, NULL, _IOLBF, 0);
         nwpd_logf(LOG_LEVEL_INFO, "nwpd v0.1 (reading on %s)\n", nwpd_config.interface);
         assert(!init_ppal_map(NULL));
 
