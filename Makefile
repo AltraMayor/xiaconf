@@ -1,9 +1,10 @@
 LIBXIA_DIR=libxia
 XIP_DIR=xip
+NWPD_DIR=nwpd
 ETC_FILES=etc-production
 
 
-all: libxia xip
+all: libxia xip nwpd
 
 libxia:
 	make -C $(LIBXIA_DIR)
@@ -11,9 +12,13 @@ libxia:
 xip:
 	make -C $(XIP_DIR)
 
+nwpd:
+	make -C $(NWPD_DIR)
+
 install: libxia xip
 	install -o root -g root -m 700 $(XIP_DIR)/xip /sbin
 	install -o root -g root -m 644 $(LIBXIA_DIR)/libxia.so.0.0 /usr/lib
+	install -o root -g root -m 700 $(NWPD_DIR)/nwpd /sbin
 	ldconfig
 	cp -r $(ETC_FILES)/xia /etc
 	mkdir -p /etc/xia/hid/prv
@@ -33,6 +38,7 @@ cscope:
 clean:
 	make -C $(XIP_DIR) clean
 	make -C $(LIBXIA_DIR) clean
+	make -C $(NWPD_DIR) clean
 
 
-.PHONY: clean libxia xip cscope
+.PHONY: clean libxia xip cscope nwpd
